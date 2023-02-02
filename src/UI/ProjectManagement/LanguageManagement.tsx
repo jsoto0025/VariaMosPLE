@@ -4,6 +4,7 @@ import * as alertify from "alertifyjs";
 import { Language } from "../../Domain/ProductLineEngineering/Entities/Language";
 import "./LanguageManagement.css";
 
+
 interface Props {
   projectService: ProjectService;
 }
@@ -21,6 +22,8 @@ class LanguageManagement extends Component<Props, State> {
       name: "",
       abstractSyntax: "",
       concreteSyntax: "",
+      //These state fields hold the content of the form
+      semantics: "",
       type: "DOMAIN",
       stateAccept: "PENDING",
     },
@@ -37,6 +40,9 @@ class LanguageManagement extends Component<Props, State> {
     this.updateName = this.updateName.bind(this);
     this.updateAbstractSyntax = this.updateAbstractSyntax.bind(this);
     this.updateConcreteSyntax = this.updateConcreteSyntax.bind(this);
+    //add handler for semantics = 
+    this.updateSemantics = this.updateSemantics.bind(this);
+
     this.updateType = this.updateType.bind(this);
     this.refreshLanguages = this.refreshLanguages.bind(this);
     this.updateLanguageListSelected =
@@ -185,6 +191,11 @@ class LanguageManagement extends Component<Props, State> {
           undefined,
           2
         ),
+        semantics: JSON.stringify(
+          languagesFilter.semantics,
+          undefined,
+          2
+        ),
         type: languagesFilter.type,
         stateAccept: languagesFilter.stateAccept,
       };
@@ -246,6 +257,7 @@ class LanguageManagement extends Component<Props, State> {
         name: "",
         abstractSyntax: "",
         concreteSyntax: "",
+        semantics: "",
         type: "DOMAIN",
         stateAccept: "PENDING",
       };
@@ -278,6 +290,7 @@ class LanguageManagement extends Component<Props, State> {
         name: event.target.value,
         abstractSyntax: this.state.formLanguage.abstractSyntax,
         concreteSyntax: this.state.formLanguage.concreteSyntax,
+        semantics: this.state.formLanguage.semantics,
         type: this.state.formLanguage.type,
         stateAccept: this.state.formLanguage.stateAccept,
       };
@@ -293,6 +306,7 @@ class LanguageManagement extends Component<Props, State> {
         name: this.state.formLanguage.name,
         abstractSyntax: event.target.value,
         concreteSyntax: this.state.formLanguage.concreteSyntax,
+        semantics: this.state.formLanguage.semantics,
         type: this.state.formLanguage.type,
         stateAccept: this.state.formLanguage.stateAccept,
       };
@@ -309,6 +323,24 @@ class LanguageManagement extends Component<Props, State> {
         name: this.state.formLanguage.name,
         abstractSyntax: this.state.formLanguage.abstractSyntax,
         concreteSyntax: event.target.value,
+        semantics: this.state.formLanguage.semantics,
+        type: this.state.formLanguage.type,
+        stateAccept: this.state.formLanguage.stateAccept,
+      };
+
+      return {
+        formLanguage,
+      };
+    });
+  }
+
+  updateSemantics(event: any) {
+    this.setState(() => {
+      const formLanguage = {
+        name: this.state.formLanguage.name,
+        abstractSyntax: this.state.formLanguage.abstractSyntax,
+        concreteSyntax: this.state.formLanguage.concreteSyntax,
+        semantics: event.target.value,
         type: this.state.formLanguage.type,
         stateAccept: this.state.formLanguage.stateAccept,
       };
@@ -325,6 +357,7 @@ class LanguageManagement extends Component<Props, State> {
         name: this.state.formLanguage.name,
         abstractSyntax: this.state.formLanguage.abstractSyntax,
         concreteSyntax: this.state.formLanguage.concreteSyntax,
+        semantics: this.state.formLanguage.semantics,
         type: event.target.value,
         stateAccept: this.state.formLanguage.stateAccept,
       };
@@ -341,6 +374,7 @@ class LanguageManagement extends Component<Props, State> {
         name: this.state.formLanguage.name,
         abstractSyntax: this.state.formLanguage.abstractSyntax,
         concreteSyntax: this.state.formLanguage.concreteSyntax,
+        semantics: this.state.formLanguage.semantics,
         type: this.state.formLanguage.type,
         stateAccept: event.target.value,
       };
@@ -525,6 +559,7 @@ class LanguageManagement extends Component<Props, State> {
               <div className="col"></div>
             </div>
           </div>
+          {/* This the pane containing the tab for language updates */}
           <div
             className="tab-pane fade"
             id="nav-updatelanguage"
@@ -543,7 +578,7 @@ class LanguageManagement extends Component<Props, State> {
                       id="updateLanguageName"
                       value={this.state.formLanguage.name}
                       onChange={this.updateName}
-                      autoComplete="off" 
+                      autoComplete="off"
                     />
                     <label htmlFor="floatingInput">Enter name</label>
                   </div>
@@ -570,8 +605,8 @@ class LanguageManagement extends Component<Props, State> {
                   <div className="form-floating">
                     <select
                       className="form-select"
-                      id="updateLanguageType"
-                      aria-label="Select type"
+                      id="updateLanguageState"
+                      aria-label="Select state"
                       value={this.state.formLanguage.stateAccept}
                       onChange={this.updateStateAccept}
                     >
@@ -579,7 +614,7 @@ class LanguageManagement extends Component<Props, State> {
                       <option value="PENDING">Pending</option>
                       <option value="DISABLED">Disabled</option>
                     </select>
-                    <label htmlFor="newLanguageType">
+                    <label htmlFor="newLanguageState">
                       Select language state
                     </label>
                   </div>
@@ -596,7 +631,7 @@ class LanguageManagement extends Component<Props, State> {
                       style={{ height: "100px" }}
                       value={this.state.formLanguage.abstractSyntax}
                       onChange={this.updateAbstractSyntax}
-                      autoComplete="off" 
+                      autoComplete="off"
                     ></textarea>
                     <label htmlFor="newLanguageAbSy">
                       Enter abstract syntax
@@ -612,10 +647,26 @@ class LanguageManagement extends Component<Props, State> {
                       style={{ height: "100px" }}
                       value={this.state.formLanguage.concreteSyntax}
                       onChange={this.updateConcreteSyntax}
-                      autoComplete="off" 
+                      autoComplete="off"
                     ></textarea>
                     <label htmlFor="newLanguageCoSy">
                       Enter concrete syntax
+                    </label>
+                  </div>
+                </div>
+                {/*We'll add a new text area for the semantic spec*/}
+                <div className="col-md">
+                  <div className="form-floating">
+                    <textarea
+                      className="form-control"
+                      placeholder="Enter Semantics"
+                      id="updateLanguageSem"
+                      style={{ height: "100px" }}
+                      value={this.state.formLanguage.semantics}
+                      onChange={this.updateSemantics}
+                    ></textarea>
+                    <label htmlFor="updateLanguageSem">
+                      Enter semantics
                     </label>
                   </div>
                 </div>
@@ -656,6 +707,7 @@ class LanguageManagement extends Component<Props, State> {
               </div>
             </div>
           </div>
+          {/* This Div holds the language creation tab */}
           <div
             className="tab-pane fade"
             id="nav-createlanguage"
@@ -698,6 +750,7 @@ class LanguageManagement extends Component<Props, State> {
                 </div>
               </div>
               <br />
+              {/*This div holds the text areas for the specs*/}
               <div className="row">
                 <div className="col-md">
                   <div className="form-floating">
@@ -726,6 +779,22 @@ class LanguageManagement extends Component<Props, State> {
                     ></textarea>
                     <label htmlFor="newLanguageCoSy">
                       Enter concrete syntax
+                    </label>
+                  </div>
+                </div>
+                {/*We'll add a new text area for the semantic spec*/}
+                <div className="col-md">
+                  <div className="form-floating">
+                    <textarea
+                      className="form-control"
+                      placeholder="Enter Semantics"
+                      id="newLanguageSem"
+                      style={{ height: "100px" }}
+                      value={this.state.formLanguage.semantics}
+                      onChange={this.updateSemantics}
+                    ></textarea>
+                    <label htmlFor="newLanguageSem">
+                      Enter semantics
                     </label>
                   </div>
                 </div>
