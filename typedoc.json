@@ -1,0 +1,8 @@
+{
+    "name": "Variamos Documentation",
+    "cleanOutputDir": true,
+    "out": "docs",
+    "entryPoints": ["src"],
+    "entryPointStrategy": "expand",
+    "plugin": ["./node_modules/typedoc-plugin-markdown","./node_modules/typedoc-github-wiki-theme"]
+}
