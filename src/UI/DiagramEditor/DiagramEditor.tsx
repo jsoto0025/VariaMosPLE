@@ -2,11 +2,18 @@ import React, { Component } from "react";
 import ProjectService from "../../Application/Project/ProjectService";
 import MxGEditor from "../MxGEditor/MxGEditor";
 
-interface Props {
+ interface Props {
+  /**
+ * {@link ProjectService} element.
+ */
   projectService: ProjectService;
 }
 interface State {}
 
+/**
+ * Contains the editor and passes the project service.
+ * @category Component
+ */
 class DiagramEditor extends Component<Props, State> {
   state = {};
 

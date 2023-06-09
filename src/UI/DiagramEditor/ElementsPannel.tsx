@@ -7,6 +7,10 @@ interface Props {
 }
 interface State {}
 
+/**
+ * Sidepanel that complements.
+ * @category Component
+ */
 class ElementsPannel extends Component<Props, State> {
   state = {};
 
