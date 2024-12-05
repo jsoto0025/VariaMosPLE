@@ -4,6 +4,8 @@ import { Project } from "../../Domain/ProductLineEngineering/Entities/Project";
 import * as alertify from "alertifyjs";
 import LanguageManagement from "./LanguageManagement";
 import _config from "../../Infraestructure/config.json";
+import { getUserProfile } from "../SignUp/SignUp.utils";
+import { SignUpUserTypes } from "../SignUp/SignUp.constants";
 
 interface Props {
   projectService: ProjectService;
@@ -12,7 +14,11 @@ interface State {
   projectName: string;
   productLineName: string;
   importProject: string | undefined;
-  version: string
+  version: string;
+  urlVariamosDoc: string;
+  urlVariamosLangDoc: string;
+  firstName: string;
+  userType: string;
 }
 
 let classActive: string = "active";
@@ -28,6 +34,10 @@ class ProjectManagement extends Component<Props, State> {
       projectName: this.props.projectService.project.name,
       importProject: "",
       version: _config.version,
+      urlVariamosDoc: _config.urlVariamosDocumentation,
+      urlVariamosLangDoc: _config.urlVariamosLangDocumentation,
+      firstName: "",
+      userType: ""
     };
     this.loadProject();
 
@@ -45,6 +55,7 @@ class ProjectManagement extends Component<Props, State> {
     this.onEnterFocusPL = this.onEnterFocusPL.bind(this);
   }
 
+  //This gets called when one selects the file on the dialog
   handleImportProject(files: FileList | null) {
     if (files) {
       let selectedFile = files[0];
@@ -60,6 +71,7 @@ class ProjectManagement extends Component<Props, State> {
     }
   }
 
+  //This gets called by the upload project modal.
   importProject() {
     this.props.projectService.importProject(this.state.importProject);
     document.getElementById("list-iProject-list")?.classList.remove("active");
@@ -73,6 +85,12 @@ class ProjectManagement extends Component<Props, State> {
     me.props.projectService.addUpdateProjectListener(
       this.projectService_addListener
     );
+
+    const userProfile = getUserProfile();
+
+    if (userProfile) {
+      this.setState({ userType: userProfile.userType })
+    }
   }
 
   projectService_addListener(e: any) {
@@ -172,9 +190,9 @@ class ProjectManagement extends Component<Props, State> {
                   Project management
                 </h5>
                 {this.props.projectService.project.enable === true && (
-
                   <div className="col d-flex justify-content-end">
-                    <ul className="list-group icon-dark-variamos list-group-horizontal">
+                    <ul className="list-group icon-dark-variamos list-group-horizontal"
+                        onClick={(e) => this.btnSaveProject_onClick(e)}>
                       <li
                         className="list-group-item nav-bar-variamos"
                         data-bs-toggle="tooltip"
@@ -184,7 +202,6 @@ class ProjectManagement extends Component<Props, State> {
                         <span
                           className="bi bi-x-lg shadow rounded"
                           id="userSetting"
-                          onClick={(e) => this.btnSaveProject_onClick(e)}
                         ></span>
                       </li>
                     </ul>
@@ -235,19 +252,22 @@ class ProjectManagement extends Component<Props, State> {
                       >
                         Upload
                       </a>
-                      <a
-                        className="list-group-item list-group-item-action"
-                        id="list-settings-list"
-                        data-bs-toggle="list"
-                        href="#list-settings"
-                        role="tab"
-                        aria-controls="settings"
-                        onClick={() =>
-                          LanguageManagement.bind(this.forceUpdate())
-                        }
-                      >
-                        Settings
-                      </a>
+                      {this.state.userType === SignUpUserTypes.Registered && (
+                          <a
+                          className="list-group-item list-group-item-action"
+                          id="list-settings-list"
+                          data-bs-toggle="list"
+                          href="#list-settings"
+                          role="tab"
+                          aria-controls="settings"
+                          onClick={() =>
+                            LanguageManagement.bind(this.forceUpdate())
+                          }
+                        >
+                          Settings
+                        </a>
+                      )}
+                      
                       <a
                         className="list-group-item list-group-item-action"
                         id="list-help-list"
@@ -416,21 +436,19 @@ class ProjectManagement extends Component<Props, State> {
                         aria-labelledby="list-help-list"
                       >
                         <div className="list-group">
-                        <a
-                            className="list-group-item list-group-item-action"
-                          >
+                          <a className="list-group-item list-group-item-action">
                             Version: {this.state.version}
                           </a>
                           <a
-                            href="https://github.com/mauroagudeloz/VariaMosPLE/wiki"
-                            target="_blanck"
+                            href={this.state.urlVariamosDoc}
+                            target="_blank"
                             className="list-group-item list-group-item-action"
                           >
                             What is VariaMos?
                           </a>
                           <a
-                            href="https://github.com/mauroagudeloz/VariaMosPLE/wiki/Language-definition"
-                            target="_blanck"
+                            href={this.state.urlVariamosLangDoc}
+                            target="_blank"
                             className="list-group-item list-group-item-action"
                           >
                             how can i define a language?
