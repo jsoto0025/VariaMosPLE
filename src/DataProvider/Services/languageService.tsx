@@ -1,17 +1,13 @@
-import axios, { Method } from "axios";
-import _config from "../../Infraestructure/config.json";
 import { Language } from "../../Domain/ProductLineEngineering/Entities/Language";
+import { LANGUAGES_CLIENT } from "../../Infraestructure/AxiosConfig";
 
-export default class LanguageService {
-  apiVariamos = axios.create({
-    baseURL: _config.urlBackEndLanguage,
-  });
+export default class LanguageService { 
 
   getLanguagesDetail(): Language[] {
     let languages: Language[] = [];
 
     try {
-      this.apiVariamos.get("/languages/detail").then((res) => {
+      LANGUAGES_CLIENT.get("/languages/detail").then((res) => {
         let responseAPISuccess: ResponseAPISuccess = new ResponseAPISuccess();
         responseAPISuccess = Object.assign(responseAPISuccess, res.data);
 
@@ -26,23 +22,38 @@ export default class LanguageService {
     return languages;
   }
 
-  createLanguage(callback: any, language: Language) {
+  getLanguagesByUser(user: string): Language[] { 
+    let languages: Language[] = [];
+    try {
+      let url = "/languagesbyuser/" + user;
+      LANGUAGES_CLIENT.get(url).then((res) => {
+        let responseAPISuccess: ResponseAPISuccess = new ResponseAPISuccess();
+        responseAPISuccess = Object.assign(responseAPISuccess, res.data);
+
+        if (responseAPISuccess.message?.includes("Error"))
+          throw new Error(JSON.stringify(res.data));
+
+        languages = Object.assign(languages, responseAPISuccess.data);
+      });
+    } catch (error) {
+      console.log("Something wrong in getLanguageDetail Service: " + error);
+    }
+    return languages;
+  }
+
+  createLanguage(callback: any, language: Language, user: string) {
     let response: string;
 
     // Standard Request Start
     let requestBody = {
       transactionId: "createLanguage_Frontend",
       data: language,
+      user: user
     };
     // Standard Request End
 
-    const config = {
-      baseURL: _config.urlBackEndLanguage + "/languages",
-      method: "post" as Method,
-      data: requestBody,
-    };
     try {
-      axios(config).then((res) => {
+      LANGUAGES_CLIENT.post("/languages", requestBody).then((res) => {
         let responseAPISuccess: ResponseAPISuccess = new ResponseAPISuccess();
         responseAPISuccess = Object.assign(responseAPISuccess, res.data);
         response = responseAPISuccess.message;
@@ -50,6 +61,19 @@ export default class LanguageService {
         if (responseAPISuccess.message?.includes("Error"))
           throw new Error(JSON.stringify(res.data));
 
+        callback(response);
+      }).catch(function (error) {
+        console.log(JSON.stringify(error));
+        let response = {
+          messageError: "Something wrong in createLanguage Service."
+        }
+        if (error.response) { 
+          if (error.response.data) { 
+            if (error.response.data.data) { 
+              response = JSON.parse(error.response.data.data);
+            }
+          }
+        }
         callback(response);
       });
     } catch (error) {
@@ -59,7 +83,7 @@ export default class LanguageService {
     }
   }
 
-  deleteLanguage(callback: any, languageId: string) {
+  deleteLanguage(callback: any, languageId: string, user: string) {
     let response: string;
 
     // Standard Request Start
@@ -68,14 +92,8 @@ export default class LanguageService {
     };
     // Standard Request End
 
-    const config = {
-      baseURL: _config.urlBackEndLanguage + "/languages/" + languageId,
-      method: "delete" as Method,
-      data: requestBody,
-    };
-
     try {
-      axios(config).then((res) => {
+      LANGUAGES_CLIENT.delete("/languages/" + languageId + "/" + user, {data: requestBody}).then((res) => {
         let responseAPISuccess: ResponseAPISuccess = new ResponseAPISuccess();
         responseAPISuccess = Object.assign(responseAPISuccess, res.data);
         response = responseAPISuccess.message;
@@ -83,6 +101,19 @@ export default class LanguageService {
         if (responseAPISuccess.message?.includes("Error"))
           throw new Error(JSON.stringify(res.data));
 
+        callback(response);
+      }).catch(function (error) {
+        console.log(JSON.stringify(error));
+        let response = {
+          messageError: "Something wrong in createLanguage Service."
+        }
+        if (error.response) { 
+          if (error.response.data) { 
+            if (error.response.data.data) { 
+              response = JSON.parse(error.response.data.data);
+            }
+          }
+        }
         callback(response);
       });
     } catch (error) {
@@ -92,24 +123,18 @@ export default class LanguageService {
     }
   }
 
-  updateLanguage(callback: any, language: Language) {
+  updateLanguage(callback: any, language: Language, user: string) {
     let response: string;
 
     // Standard Request Start
     let requestBody = {
       transactionId: "updateLanguage_Frontend",
       data: language,
-    };
-    // Standard Request End
-
-    const config = {
-      baseURL: _config.urlBackEndLanguage + "/languages/" + language.id,
-      method: "put" as Method,
-      data: requestBody,
+      user: user
     };
 
     try {
-      axios(config).then((res) => {
+      LANGUAGES_CLIENT.put("/languages/" + language.id, requestBody).then((res) => {
         let responseAPISuccess: ResponseAPISuccess = new ResponseAPISuccess();
         responseAPISuccess = Object.assign(responseAPISuccess, res.data);
         response = responseAPISuccess.message;
@@ -117,6 +142,19 @@ export default class LanguageService {
         if (responseAPISuccess.message?.includes("Error"))
           throw new Error(JSON.stringify(res.data));
 
+        callback(response);
+      }).catch(function (error) {
+        console.log(JSON.stringify(error));
+        let response = {
+          messageError: "Something wrong in createLanguage Service."
+        }
+        if (error.response) { 
+          if (error.response.data) { 
+            if (error.response.data.data) { 
+              response = JSON.parse(error.response.data.data);
+            }
+          }
+        }
         callback(response);
       });
     } catch (error) {
@@ -129,7 +167,7 @@ export default class LanguageService {
   getLanguages(callBack: any) {
     let languages: Language[] = [];
     try {
-      this.apiVariamos.get("/languages/detail").then((res) => {
+      LANGUAGES_CLIENT.get("/languages/detail").then((res) => {
         let responseAPISuccess: ResponseAPISuccess = new ResponseAPISuccess();
         responseAPISuccess = Object.assign(responseAPISuccess, res.data);
 

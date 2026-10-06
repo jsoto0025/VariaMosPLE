@@ -10,6 +10,14 @@ export class Property {
   display: boolean;
   comment?: string; //comments
   possibleValues?: any; //list with "," - range with ".."" - example: one, two, ten - 1..10 - true, false
+  possibleValuesLinks?: {}; //list with "," - range with ".."" - example: one, two, ten - 1..10 - true, false
+  minCardinality?:number;
+  maxCardinality?:number;
+  metadata?: any;
+  constraint?: string; //[1..1];[2..4]
+  defaultValue?:string;
+  autocompleteSource?:string;
+
   constructor(
     name: string,
     value: any,
@@ -20,7 +28,13 @@ export class Property {
     custom: boolean,
     display: boolean,
     comment: string,
-    possibleValues: any
+    possibleValues: any,
+    possibleValuesLinks: {},
+    minCardinality: any,
+    maxCardinality: any,
+    constraint: any,
+    defaultValue: any,
+    autocompleteSource:any
   ) {
     this.id = generateId();
     this.name = name;
@@ -33,6 +47,12 @@ export class Property {
     this.display = display;
     this.comment = comment;
     this.possibleValues = possibleValues;
+    this.possibleValuesLinks = possibleValuesLinks;
+    this.minCardinality = minCardinality;
+    this.maxCardinality = maxCardinality;
+    this.constraint = constraint;
+    this.defaultValue=defaultValue;
+    this.autocompleteSource=autocompleteSource;
   }
 }
 
