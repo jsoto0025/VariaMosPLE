@@ -1,43 +1,74 @@
+import { SessionUser } from "@variamosple/variamos-components";
+import * as alertify from "alertifyjs";
+import { Buffer } from "buffer";
+import { Utils } from "../../Addons/Library/Utils/Utils";
+import { Config } from "../../Config";
+import {
+  getProjectProvider,
+  handleCollaborativeProject,
+  observeModelState,
+  updateModelState
+} from "../../DataProvider/Services/collab/collaborationService";
 import { Adaptation } from "../../Domain/ProductLineEngineering/Entities/Adaptation";
 import { Application } from "../../Domain/ProductLineEngineering/Entities/Application";
+import { ConfigurationInformation } from "../../Domain/ProductLineEngineering/Entities/ConfigurationInformation";
+import { Element } from "../../Domain/ProductLineEngineering/Entities/Element";
+import { ExternalFuntion } from "../../Domain/ProductLineEngineering/Entities/ExternalFuntion";
+import { Language } from "../../Domain/ProductLineEngineering/Entities/Language";
 import { Model } from "../../Domain/ProductLineEngineering/Entities/Model";
+import { Point } from "../../Domain/ProductLineEngineering/Entities/Point";
 import { ProductLine } from "../../Domain/ProductLineEngineering/Entities/ProductLine";
 import { Project } from "../../Domain/ProductLineEngineering/Entities/Project";
-import { Element } from "../../Domain/ProductLineEngineering/Entities/Element";
-import { NewModelEventArg } from "./Events/NewModelEventArg";
-import ProjectManager from "../../Domain/ProductLineEngineering/UseCases/ProjectUseCases";
-import { Language } from "../../Domain/ProductLineEngineering/Entities/Language";
-import LanguageUseCases from "../../Domain/ProductLineEngineering/UseCases/LanguageUseCases";
-import { SelectedModelEventArg } from "./Events/SelectedModelEventArg";
-import { SelectedElementEventArg } from "./Events/SelectedElementEventArg";
-import { UpdatedElementEventArg } from "./Events/UpdatedElementEventArg";
-import { LanguagesDetailEventArg } from "./Events/LanguagesDetailEventArg";
-import { ProjectEventArg } from "./Events/ProjectEventArg";
-import { NewProductLineEventArg } from "./Events/NewProductLineEventArg";
-import { NewApplicationEventArg } from "./Events/NewApplicationEventArg";
-import { NewAdaptationEventArg } from "./Events/NewAdaptationEventArg";
-import { ExternalFuntion } from "../../Domain/ProductLineEngineering/Entities/ExternalFuntion";
-import { Utils } from "../../Addons/Library/Utils/Utils";
-import _config from "../../Infraestructure/config.json";
-import { Relationship } from "../../Domain/ProductLineEngineering/Entities/Relationship";
+import { ProjectAnnotation } from "../../Domain/ProductLineEngineering/Entities/ProjectAnnotation";
+import { ProjectHistory } from "../../Domain/ProductLineEngineering/Entities/ProjectHistory";
+import { ProjectInformation } from "../../Domain/ProductLineEngineering/Entities/ProjectInformation";
 import { Property } from "../../Domain/ProductLineEngineering/Entities/Property";
-import { Point } from "../../Domain/ProductLineEngineering/Entities/Point";
+import { Query } from "../../Domain/ProductLineEngineering/Entities/Query";
+import { Relationship } from "../../Domain/ProductLineEngineering/Entities/Relationship";
+import LanguageUseCases from "../../Domain/ProductLineEngineering/UseCases/LanguageUseCases";
+import ProjectPersistenceUseCases from "../../Domain/ProductLineEngineering/UseCases/ProjectPersistenceUseCases";
+import {
+  ModelLookupResult,
+  default as ProjectManager,
+  default as ProjectUseCases,
+} from "../../Domain/ProductLineEngineering/UseCases/ProjectUseCases";
+import { runQuery, runQueryFromModel } from "../../Domain/ProductLineEngineering/UseCases/QueryUseCases";
 import RestrictionsUseCases from "../../Domain/ProductLineEngineering/UseCases/RestrictionsUseCases";
-import ProjectUseCases from "../../Domain/ProductLineEngineering/UseCases/ProjectUseCases";
+import { CreatedElementEventArg } from "./Events/CreatedElementEventArg";
+import { LanguagesDetailEventArg } from "./Events/LanguagesDetailEventArg";
+import { NewAdaptationEventArg } from "./Events/NewAdaptationEventArg";
+import { NewApplicationEventArg } from "./Events/NewApplicationEventArg";
+import { NewModelEventArg } from "./Events/NewModelEventArg";
+import { NewProductLineEventArg } from "./Events/NewProductLineEventArg";
+import { ProjectEventArg } from "./Events/ProjectEventArg";
+import { SelectedElementEventArg } from "./Events/SelectedElementEventArg";
+import { SelectedModelEventArg } from "./Events/SelectedModelEventArg";
+import { UpdatedElementEventArg } from "./Events/UpdatedElementEventArg";
+
 
 export default class ProjectService {
   private graph: any;
   private projectManager: ProjectManager = new ProjectManager();
   private languageUseCases: LanguageUseCases = new LanguageUseCases();
+  private projectPersistenceUseCases: ProjectPersistenceUseCases = new ProjectPersistenceUseCases();
   private restrictionsUseCases: RestrictionsUseCases =
     new RestrictionsUseCases();
 
   private utils: Utils = new Utils();
 
-  private _environment: string = _config.environment;
-  private _languages: any = this.getLanguagesDetail();
+  //Since we have no access to the current language,
+  //We will need a parameter query when we need it
+  // more and more it's clear we need redux or something like it
+  // to manage the state of the application
+  private _currentLanguage: Language = null;
+  private _currentModel: Model = null;
+
+  private _environment: string = Config.NODE_ENV;
+  private _languages: any = this.getLanguagesByUser();
   private _externalFunctions: ExternalFuntion[] = [];
   private _project: Project = this.createProject("");
+  private _projectInformation: ProjectInformation;
+  private _isProjectLoaded: boolean = false;
   private treeItemSelected: string = "";
   private treeIdItemSelected: string = "";
   private productLineSelected: number = 0;
@@ -47,6 +78,7 @@ export default class ProjectService {
   private newProductLineListeners: any = [];
   private newApplicationListeners: any = [];
   private newAdaptationListeners: any = [];
+  private scopeModelListeners: any = [];
   private newDomainEngineeringModelListeners: any = [];
   private newApplicationEngineeringModelListeners: any = [];
   private newApplicationModelListeners: any = [];
@@ -57,15 +89,23 @@ export default class ProjectService {
   private updateSelectedListeners: any = [];
   private selectedElementListeners: any = [];
   private updatedElementListeners: any = [];
+  private createdElementListeners: any = [];
+  private requestSaveConfigurationListener: any = [];
+  private requestOpenConfigurationListener: any = [];
+  private requestOpenCatalogListener: any = [];
+  private user?: SessionUser;
 
-  // constructor() {
-  //   let me = this;
-  //   let fun = function (data: any) {
-  //     me._languages = data;
-  //   };
+  constructor(user?: SessionUser) {
+    this.user = user;
+  }
 
-  //   this.languageService.getLanguages(fun);
-  // }
+  public get currentModel(): Model {
+    return this._currentModel;
+  }
+
+  public get currentLanguage(): Language {
+    return this._currentLanguage;
+  }
 
   public get externalFunctions(): ExternalFuntion[] {
     return this._externalFunctions;
@@ -75,52 +115,235 @@ export default class ProjectService {
     return this._environment;
   }
 
-  callExternalFuntion(externalFunction: ExternalFuntion) {
+  public isProjectLoaded(): boolean {
+    return this._isProjectLoaded;
+  }
+
+  public setProjectLoaded(value: boolean): void {
+    this._isProjectLoaded = value;
+  }
+
+  public getProject(): Project {
+    return this._project;
+  }
+
+  public getProjectInformation(): ProjectInformation {
+    return this._projectInformation;
+  }
+
+  public setProjectInformation(projectInformation: ProjectInformation) {
+    this._projectInformation = projectInformation;
+  }
+
+  public getProductLineSelected(): ProductLine {
+    let i = this.productLineSelected;
+    return this.project.productLines[i];
+  }
+
+  callExternalFuntion(
+    externalFunction: ExternalFuntion,
+    query: any,
+    selectedElementsIds: string[],
+    selectedRelationshipsIds: string[]
+  ) {
     let me = this;
 
     // Standard Request Start
     externalFunction.request = {};
 
+    //pack the semantics
+    const semantics = me._languages.filter(
+      (lang) => lang.id === externalFunction.language_id
+    )[0].semantics;
+
+    const data = {
+      modelSelectedId: me.treeIdItemSelected,
+      project: me._project,
+      rules: semantics,
+      selectedElementsIds: selectedElementsIds,
+      selectedRelationshipsIds: selectedRelationshipsIds,
+    };
+
     externalFunction.request = {
-      transactionId: "callExternalFuntion_Frontend",
-      data: { modelSelectedId: me.treeIdItemSelected, project: me._project },
+      transactionId: me.generateId(),
+      data: !query ? data : { ...data, query },
     };
     // Standard Request End
 
     let callback = function (response: any) {
       //Decode content.
-      response.data.content = Buffer.from(
-        response.data.content,
-        "base64"
-      ).toString();
-
-      if (response.data.name.indexOf("json") > -1)
+      //alert(JSON.stringify(response));
+      if (externalFunction.resulting_action === "download") {
+        let buffer = Buffer.from(response.data.content, "base64");
+        response.data.content = buffer;
+      } else if (response.data.name?.indexOf("json") > -1)
         response.data.content = JSON.parse(response.data.content);
 
       const resulting_action: any = {
         download: function () {
-          me.utils.downloadFile(response.data.name, response.data.content);
+          me.utils.downloadBinaryFile(
+            response.data.name,
+            response.data.content
+          );
         },
         showonscreen: function () {
-          alert(JSON.stringify(response.data.content));
+          // alert(JSON.stringify(response.data.content));
+          if ("error" in response.data) {
+            alertify.error(response.data.error);
+          } else {
+            if (String(response.data.content).includes("(model")) {
+              // alertify.alert("Model semantics", `${String(response.data.content)}`)
+              alert(`${String(response.data.content)}`);
+            } else {
+              alertify.success(String(response.data.content));
+            }
+            // document.getElementById(me.treeIdItemSelected).click();
+          }
+        },
+        updateproject: function () {
+          if ("error" in response.data) {
+            alertify.error(response.data.error);
+          } else {
+            me.updateProject(response.data.content, me.treeIdItemSelected);
+            // document.getElementById(me.treeIdItemSelected).click();
+          }
         },
       };
-
-      resulting_action[externalFunction.resulting_action]();
+      //Set the resulting action to be conditional on the query itself
+      //since we will have a single mechanism for making these queries
+      // TODO: FIXME: This is a dirty hack...
+      if (!query) {
+        resulting_action[externalFunction.resulting_action]();
+      } else {
+        if (response.data.content?.productLines) {
+          resulting_action["updateproject"]();
+        } else {
+          resulting_action["showonscreen"]();
+        }
+      }
     };
+    alertify.success("request sent ...");
     me.languageUseCases.callExternalFuntion(callback, externalFunction);
   }
 
   loadExternalFunctions(languageName: string) {
     let me = this;
-    let language = this._languages.filter(language => language.name == languageName);
+    let language = this._languages.filter(
+      (language) => language.name == languageName
+    );
     let callback = function (data: any) {
       me._externalFunctions = data;
     };
-
-    this.languageUseCases.getExternalFunctions(callback, language[0].id);
+    if (language) {
+      if (language.length > 0) {
+        this.languageUseCases.getExternalFunctions(callback, language[0].id);
+        // HACK: FIXME: This is a dirty hack...
+        // We will se the current language to be the first one
+        // so that we can get it instead of passing through a million different
+        // functions
+        this._currentLanguage = language[0];
+      }
+    }
   }
 
+  getIdCurrentProductLine() {
+    for (let idProductLine = 0; idProductLine < this.project.productLines.length; idProductLine++) {
+      const productLine = this.project.productLines[idProductLine];
+      if (productLine.scope == this.getScope()) {
+        return idProductLine;
+      }
+    }
+    return 0;
+  }
+  getSelectedScope() {
+    const selectedId = this.treeIdItemSelected;
+    console.log("Selected ID:", selectedId);
+
+    if (!selectedId) {
+      console.warn("No selected ID found");
+      return null;
+    }
+
+    for (const productLine of this.project.productLines) {
+      const scopeModels = productLine?.scope?.models || [];
+      console.log("Checking scope models:", scopeModels);
+
+      const foundModel = scopeModels.find((model) => model.id === selectedId);
+
+      if (foundModel) {
+        console.log("Found model:", foundModel);
+        return foundModel; // Devuelve el modelo encontrado
+      }
+    }
+
+    console.warn("No scope model matches the selected ID");
+    return null;
+  }
+  getScope() {
+    const selectedId = this.treeIdItemSelected;
+    for (const productLine of this.project.productLines) {
+      const scopeModels = productLine?.scope?.models || [];
+      const scope = productLine?.scope;
+      if (scope) {
+        return scope;
+      }
+    }
+    return null;
+  }
+
+  getStructureAndRelationships() {
+    const selectedScope = this.getSelectedScope();
+    if (!selectedScope) {
+      console.warn("No scope selected. Cannot fetch structure.");
+      return { elements: [], relationships: [] };
+    }
+
+    const structure = selectedScope?.elements || [];
+    const relationships = selectedScope?.relationships || [];
+    return { elements: structure, relationships };
+  }
+
+  getFinalMaterials(structure, configurations) {
+    console.log("Structure:", structure);
+    console.log("Configurations:", configurations);
+
+    if (!structure || !structure.elements || !structure.relationships) {
+      console.error("Structure is invalid or incomplete");
+      return { elements: [], relationships: [] };
+    }
+
+    // Asocia configuraciones con elementos
+    const enrichedElements = structure.elements.map((element) => {
+      // Buscar todas las configuraciones relacionadas con este elemento
+      const matchingFeatures = configurations.filter(
+        (feature) => feature.id === element.id
+      );
+
+      // Combinar las propiedades de las configuraciones relacionadas
+      const combinedProperties = matchingFeatures.flatMap(
+        (feature) => feature.properties || []
+      );
+
+      return {
+        ...element,
+        properties: combinedProperties,
+      };
+    });
+
+    console.log("Final enriched elements:", enrichedElements);
+
+    return { elements: enrichedElements, relationships: structure.relationships };
+  }
+
+  modelScopeSelected(idPl: number, idScopeModel: number) {
+    let modelSelected =
+      this._project.productLines[idPl].scope?.models[idScopeModel];
+    this.treeItemSelected = "model";
+    this.treeIdItemSelected = modelSelected.id;
+    this.loadExternalFunctions(modelSelected.type);
+    this.raiseEventSelectedModel(modelSelected);
+    this.raiseEventUpdateSelected(this.treeItemSelected);
+  }
   //Search Model functions_ START***********
   modelDomainSelected(idPl: number, idDomainModel: number) {
     let modelSelected =
@@ -129,7 +352,7 @@ export default class ProjectService {
     this.treeItemSelected = "model";
     this.treeIdItemSelected = modelSelected.id;
 
-    this.loadExternalFunctions(modelSelected.name);
+    this.loadExternalFunctions(modelSelected.type);
 
     this.raiseEventSelectedModel(modelSelected);
     this.raiseEventUpdateSelected(this.treeItemSelected);
@@ -143,7 +366,7 @@ export default class ProjectService {
     this.treeItemSelected = "model";
     this.treeIdItemSelected = modelSelected.id;
 
-    this.loadExternalFunctions(modelSelected.name);
+    this.loadExternalFunctions(modelSelected.type);
 
     this.raiseEventSelectedModel(modelSelected);
     this.raiseEventUpdateSelected(this.treeItemSelected);
@@ -161,7 +384,7 @@ export default class ProjectService {
     this.treeItemSelected = "model";
     this.treeIdItemSelected = modelSelected.id;
 
-    this.loadExternalFunctions(modelSelected.name);
+    this.loadExternalFunctions(modelSelected.type);
 
     this.raiseEventSelectedModel(modelSelected);
     this.raiseEventUpdateSelected(this.treeItemSelected);
@@ -181,7 +404,7 @@ export default class ProjectService {
     this.treeItemSelected = "model";
     this.treeIdItemSelected = modelSelected.id;
 
-    this.loadExternalFunctions(modelSelected.name);
+    this.loadExternalFunctions(modelSelected.type);
 
     this.raiseEventSelectedModel(modelSelected);
     this.raiseEventUpdateSelected(this.treeItemSelected);
@@ -198,6 +421,7 @@ export default class ProjectService {
   raiseEventSelectedModel(model: Model | undefined) {
     if (model) {
       let me = this;
+      me._currentModel = model;
       let e = new SelectedModelEventArg(me, model);
       for (let index = 0; index < me.selectedModelListeners.length; index++) {
         let callback = this.selectedModelListeners[index];
@@ -246,6 +470,26 @@ export default class ProjectService {
     }
   }
 
+  addCreatedElementListener(listener: any) {
+    this.createdElementListeners.push(listener);
+  }
+
+  removeCreatedElementListener(listener: any) {
+    this.createdElementListeners[listener] = null;
+  }
+
+  raiseEventCreatedElement(
+    model: Model | undefined,
+    element: Element | undefined
+  ) {
+    let me = this;
+    let e = new CreatedElementEventArg(me, model, element);
+    for (let index = 0; index < me.createdElementListeners.length; index++) {
+      let callback = this.createdElementListeners[index];
+      callback(e);
+    }
+  }
+
   updateAdaptationSelected(
     idPl: number,
     idApplication: number,
@@ -271,10 +515,16 @@ export default class ProjectService {
       ].id;
     this.raiseEventUpdateSelected(this.treeItemSelected);
   }
+
   updateLpSelected(idPl: number) {
     this.productLineSelected = idPl;
     this.treeItemSelected = "productLine";
     this.treeIdItemSelected = this._project.productLines[idPl].id;
+    this.raiseEventUpdateSelected(this.treeItemSelected);
+  }
+
+  updateScopeSelected() {
+    this.treeItemSelected = "scope";
     this.raiseEventUpdateSelected(this.treeItemSelected);
   }
 
@@ -283,9 +533,37 @@ export default class ProjectService {
     this.raiseEventUpdateSelected(this.treeItemSelected);
   }
 
+
+
+  updateScopeSelectedOri(scopeModelId?: string) {
+    if (!scopeModelId) {
+      const selectedProductLine = this.project.productLines.find(
+        (pl) => pl.id === this.treeIdItemSelected
+      );
+
+      if (selectedProductLine?.scope?.models?.length) {
+        scopeModelId = selectedProductLine.scope.models[0].id;
+      } else {
+        console.error("No valid scope models found to select.");
+        return;
+      }
+    }
+
+    this.treeItemSelected = "scopeSPL";
+    this.treeIdItemSelected = scopeModelId;
+    this.raiseEventUpdateSelected(this.treeItemSelected);
+  }
+
+
   updateAppEngSelected() {
     this.treeItemSelected = "applicationEngineering";
     this.raiseEventUpdateSelected(this.treeItemSelected);
+  }
+
+  //Function ot get currently selected model
+  getTreeIdItemSelected(): string {
+    console.log("Tree ID Item Selected:", this.treeIdItemSelected);
+    return this.treeIdItemSelected;
   }
 
   getTreeItemSelected() {
@@ -320,13 +598,35 @@ export default class ProjectService {
     return this._languages;
   }
 
+  getUser() {
+    if (this.user) {
+      return this.user?.id;
+    } else {
+      return '21cd2d82-1bbc-43e9-898a-d5a45abdeced'; //todo: comentariar al publicar
+    }
+  }
+
+  isGuessUser() {
+    if (this.user) {
+      const roles = this.user?.roles || []
+      return !!roles.find((role) => role.toLowerCase() === "guest");
+    } else {
+      return false; //todo: comentariar al publicar
+    }
+  }
+
+  getLanguagesByUser(): Language[] {
+    let user = this.getUser();
+    return this.languageUseCases.getLanguagesByUser(user);
+  }
+
   getLanguagesDetail(): Language[] {
     return this.languageUseCases.getLanguagesDetail();
   }
 
   applyRestrictions(callback: any, model: Model) {
     let languageByName: Language = this.languageUseCases.getLanguageByName(
-      model.name,
+      model.type,
       this._languages
     );
 
@@ -341,28 +641,35 @@ export default class ProjectService {
   }
 
   createLanguage(callback: any, language: any) {
-    language.abstractSyntax = JSON.parse(language.abstractSyntax);
-    language.concreteSyntax = JSON.parse(language.concreteSyntax);
-
-    return this.languageUseCases.createLanguage(callback, language);
+    let user = this.getUser();
+    if (user) {
+      language.abstractSyntax = JSON.parse(language.abstractSyntax);
+      language.concreteSyntax = JSON.parse(language.concreteSyntax);
+      language.semantics = JSON.parse(language.semantics);
+      return this.languageUseCases.createLanguage(callback, language, user);
+    }
   }
 
   updateLanguage(callback: any, language: any, languageId: string) {
-    language.id = languageId;
-    language.abstractSyntax = JSON.parse(language.abstractSyntax);
-    language.concreteSyntax = JSON.parse(language.concreteSyntax);
-
-    return this.languageUseCases.updateLanguage(callback, language);
+    let user = this.getUser();
+    if (user) {
+      language.id = languageId;
+      language.abstractSyntax = JSON.parse(language.abstractSyntax);
+      language.concreteSyntax = JSON.parse(language.concreteSyntax);
+      language.semantics = JSON.parse(language.semantics);
+      return this.languageUseCases.updateLanguage(callback, language, user);
+    }
   }
 
   deleteLanguage(callback: any, languageId: string) {
-    return this.languageUseCases.deleteLanguage(callback, languageId);
+    let user = this.getUser();
+    return this.languageUseCases.deleteLanguage(callback, languageId, user);
   }
 
   existDomainModel(language: string): boolean {
     let existModel = this._project.productLines[
       this.productLineSelected
-    ].domainEngineering.models.filter((model) => model.name === language)[0];
+    ].domainEngineering.models.filter((model) => model.type === language)[0];
 
     if (existModel) return true;
 
@@ -373,7 +680,7 @@ export default class ProjectService {
     let existModel = this._project.productLines[
       this.productLineSelected
     ].applicationEngineering.models.filter(
-      (model) => model.name === language
+      (model) => model.type === language
     )[0];
 
     if (existModel) return true;
@@ -386,7 +693,7 @@ export default class ProjectService {
       this.productLineSelected
     ].applicationEngineering.applications[
       this.applicationSelected
-    ].models.filter((model) => model.name === language)[0];
+    ].models.filter((model) => model.type === language)[0];
 
     if (existModel) return true;
 
@@ -398,7 +705,7 @@ export default class ProjectService {
       this.productLineSelected
     ].applicationEngineering.applications[this.applicationSelected].adaptations[
       this.adaptationSelected
-    ].models.filter((model) => model.name === language)[0];
+    ].models.filter((model) => model.type === language)[0];
 
     if (existModel) return true;
 
@@ -446,6 +753,13 @@ export default class ProjectService {
     this._project = value;
   }
 
+  createNewProject(projectName: string, productLineName: string, type: string, domain: string) {
+    let project = this.projectManager.createProject(projectName);
+    this.createLPS(project, productLineName, type, domain);
+    this._isProjectLoaded = true;
+    return project;
+  }
+
   createProject(projectName: string): Project {
     let project = this.projectManager.createProject(projectName);
     project = this.loadProject(project);
@@ -453,11 +767,24 @@ export default class ProjectService {
     return project;
   }
 
+  //This gets called when one uploads a project file
+  //It takes as the parameters the file one selects from the
+  //dialog
   importProject(file: string | undefined): void {
+    console.log(file);
     if (file) {
       this._project = Object.assign(this._project, JSON.parse(file));
+      this._projectInformation = new ProjectInformation(null, null, this._project.name, null, false, null, null, null, new Date(), false);
+      this._isProjectLoaded = true;
     }
-    this.raiseEventUpdateProject(this._project);
+    this.raiseEventUpdateProject(this._project, null);
+  }
+
+  updateProject(project: Project, modelSelectedId: string): void {
+    this._project = project;
+    this.raiseEventUpdateProject(this._project, modelSelectedId);
+    //find the model selected
+    //By default, only a single product line is supported
   }
 
   loadProject(project: Project): Project {
@@ -467,6 +794,183 @@ export default class ProjectService {
     }
 
     return project;
+  }
+
+  // TODO TRABAJAR AQUí POSTERIORMENTE, se abre el proyecto en el servidor
+  openProjectInServer(projectId: string, template: boolean): void {
+    let me = this;
+    let user = this.getUser();
+    console.log("abro projecto en project service", user);
+
+    let openProjectInServerSuccessCallback = async (projectInformation: ProjectInformation) => {
+      me._project = projectInformation.project;
+      me._projectInformation = projectInformation;
+      me._currentModel = null;
+      me._isProjectLoaded = true;
+
+      if (projectInformation.id && me._project) {
+        me._project.id = projectInformation.id;
+      }
+
+      if (template) {
+        me._projectInformation.id = null;
+        me._projectInformation.template = false;
+      }
+      me.raiseEventUpdateProject(me._project, null);
+
+      me.handleCollaborativeProject(me._project.id, projectInformation)
+    }
+
+    let openProjectInServerErrorCallback = (e) => {
+      alert(JSON.stringify(e));
+    }
+
+    this.projectPersistenceUseCases.openProject(user, projectId, openProjectInServerSuccessCallback, openProjectInServerErrorCallback);
+  }
+
+  regenerateIds = () => {
+    this._project.productLines.forEach((productLine) => {
+      productLine.id = this.generateId();
+
+      productLine.scope.models.forEach((model) => {
+        model.id = this.generateId();
+      });
+
+      productLine.domainEngineering.models.forEach((model) => {
+        model.id = this.generateId();
+      });
+
+      productLine.applicationEngineering.models.forEach((model) => {
+        model.id = this.generateId();
+      });
+    });
+  };
+
+  saveProjectInServer(projectInformation: ProjectInformation, successCallback: any, errorCallback: any): void {
+    let me = this;
+    let user = this.getUser();
+    projectInformation.project = this._project;
+
+    let sc = (e) => {
+      me._projectInformation = e;
+      if (successCallback) {
+        successCallback(e);
+      }
+    }
+    this.projectPersistenceUseCases.saveProject(user, projectInformation, sc, errorCallback);
+  }
+
+  deleteProjectInServer(projectInformation: ProjectInformation, successCallback: any, errorCallback: any): void {
+    let me = this;
+    let user = this.getUser();
+
+    let sc = (e) => {
+      me._projectInformation = e;
+      if (successCallback) {
+        successCallback(e);
+      }
+    }
+    this.projectPersistenceUseCases.deleteProject(user, projectInformation, sc, errorCallback);
+  }
+
+  saveConfigurationInServer(configurationInformation: ConfigurationInformation, successCallback: any, errorCallback: any): void {
+    let me = this;
+    let user = this.getUser();
+
+    let projectInformation = this.getProjectInformation();
+    if (!projectInformation) {
+      return;
+    }
+
+    configurationInformation.id_feature_model = this.treeIdItemSelected;
+    configurationInformation.project_json = this._project;
+
+    let sc = (e) => {
+      if (successCallback) {
+        successCallback(e);
+      }
+    }
+    this.projectPersistenceUseCases.addConfiguration(user, projectInformation, configurationInformation, sc, errorCallback);
+  }
+
+
+  getProjectsByUser(successCallback: any, errorCallback: any) {
+    let user = this.getUser();
+    console.log("get project by user, ", user);
+    this.projectPersistenceUseCases.getProjectsByUser(user, successCallback, errorCallback);
+  }
+
+  getTemplateProjects(successCallback: any, errorCallback: any) {
+    let user = this.getUser();
+    this.projectPersistenceUseCases.getTemplateProjects(user, successCallback, errorCallback);
+  }
+
+
+  getAllConfigurations(successCallback: any, errorCallback: any) {
+    let me = this;
+    let user = this.getUser();
+    let projectInformation = this.getProjectInformation();
+    if (!projectInformation) {
+      return;
+    }
+    let configurationInformation = new ConfigurationInformation(null, null, this.treeIdItemSelected, null);
+    this.projectPersistenceUseCases.getAllConfigurations(user, projectInformation, configurationInformation, successCallback, errorCallback);
+  }
+
+  applyConfigurationInServer(configurationId: string,): void {
+    let me = this;
+    let user = this.getUser();
+    let projectInformation = this.getProjectInformation();
+    if (!projectInformation) {
+      return;
+    }
+    let modelId = this.treeIdItemSelected;
+    let configurationInformation = new ConfigurationInformation(configurationId, null, modelId, null);
+
+    let successCallback = (project: Project) => {
+      let configuredModel: Model = this.findModelById(project, modelId);
+      let targetModel: Model = this.findModelById(me._project, modelId);
+      targetModel.elements = configuredModel.elements;
+      targetModel.relationships = configuredModel.relationships;
+      me.raiseEventUpdateProject(this._project, modelId);
+    }
+
+    let errorCallback = (e) => {
+      alert(JSON.stringify(e));
+    }
+
+    this.projectPersistenceUseCases.applyConfiguration(user, projectInformation, configurationInformation, successCallback, errorCallback);
+  }
+
+  deleteConfigurationInServer(configurationId: string, successCallback?: any, errorCallback?: any): void {
+    let me = this;
+    let user = this.getUser();
+    let projectInformation = this.getProjectInformation();
+    if (!projectInformation) {
+      if (errorCallback) {
+        errorCallback(new Error("No se encontró información del proyecto"));
+      }
+      return;
+    }
+    let modelId = this.treeIdItemSelected;
+    let configurationInformation = new ConfigurationInformation(configurationId, null, modelId, null);
+
+    let internalSuccessCallback = (response: any) => {
+      if (successCallback) {
+        successCallback(response);
+      }
+    }
+
+    let internalErrorCallback = (error: any) => {
+      console.error(`Error eliminando configuración del servidor:`, error);
+      if (errorCallback) {
+        errorCallback(error);
+      } else {
+        alert(JSON.stringify(error));
+      }
+    }
+
+    this.projectPersistenceUseCases.deleteConfiguration(user, projectInformation, configurationInformation, internalSuccessCallback, internalErrorCallback);
   }
 
   saveProject(): void {
@@ -479,19 +983,35 @@ export default class ProjectService {
   }
 
   exportProject() {
-    this.utils.downloadFile(this._project.id + ".json", this._project);
+    this.utils.downloadFile(this._project.name + ".json", this._project);
+  }
+
+  /**
+   * Obtiene el ID del modelo actualmente abierto en el editor
+   */
+  getCurrentlyOpenModelId(): string | null {
+    // El modelo actualmente abierto es el que está en _currentModel
+    return this._currentModel?.id || null;
   }
 
   deleteItemProject() {
+    const deletedItemId = this.treeIdItemSelected;
+    const currentlyOpenModelId = this.getCurrentlyOpenModelId();
+
     this._project = this.projectManager.deleteItemProject(
       this._project,
-      this.treeIdItemSelected
+      deletedItemId
     );
-    this.raiseEventUpdateProject(this._project);
+    // Solo cerrar el editor si el modelo eliminado es el que está actualmente abierto
+    if (deletedItemId === currentlyOpenModelId) {
+      this.raiseEventUpdateProject(this._project, null);
+    } else {
+      this.raiseEventUpdateProject(this._project, currentlyOpenModelId);
+    }
   }
 
   refreshLanguageList() {
-    this._languages = this.getLanguagesDetail();
+    this._languages = this.getLanguagesByUser();
     this.raiseEventLanguagesDetail(this._languages);
   }
 
@@ -501,17 +1021,24 @@ export default class ProjectService {
       this.treeIdItemSelected,
       newName
     );
-    this.raiseEventUpdateProject(this._project);
+    this.raiseEventUpdateProject(this._project, this.treeIdItemSelected);
+  }
+
+  getItemProjectName() {
+    return this.projectManager.getItemProjectName(
+      this._project,
+      this.treeIdItemSelected
+    );
   }
 
   updateProjectState(state: boolean) {
     this._project.enable = state;
-    this.raiseEventUpdateProject(this._project);
+    this.raiseEventUpdateProject(this._project, this.treeIdItemSelected);
   }
 
   updateProjectName(name: string) {
     this._project.name = name;
-    this.raiseEventUpdateProject(this._project);
+    this.raiseEventUpdateProject(this._project, this.treeIdItemSelected);
   }
 
   addUpdateProjectListener(listener: any) {
@@ -522,19 +1049,72 @@ export default class ProjectService {
     this.updateProjectListeners[listener] = null;
   }
 
-  raiseEventUpdateProject(project: Project) {
+  raiseEventUpdateProject(project: Project, modelSelectedId: string) {
     let me = this;
-    let e = new ProjectEventArg(me, project);
+    let e = new ProjectEventArg(me, project, modelSelectedId);
     for (let index = 0; index < me.updateProjectListeners.length; index++) {
       let callback = this.updateProjectListeners[index];
+      callback(e);
+    }
+  }
+
+  addRequestSaveConfigurationListener(listener: any) {
+    this.requestSaveConfigurationListener.push(listener);
+  }
+
+  removeRequestSaveConfigurationListener(listener: any) {
+    this.requestSaveConfigurationListener[listener] = null;
+  }
+
+  raiseEventRequestSaveConfigurationListener(project: Project, modelSelectedId: string) {
+    let me = this;
+    let e = new ProjectEventArg(me, project, modelSelectedId);
+    for (let index = 0; index < me.requestSaveConfigurationListener.length; index++) {
+      let callback = this.requestSaveConfigurationListener[index];
+      callback(e);
+    }
+  }
+
+  addRequestOpenConfigurationListener(listener: any) {
+    this.requestOpenConfigurationListener.push(listener);
+  }
+
+  removeRequestOpenConfigurationListener(listener: any) {
+    this.requestOpenConfigurationListener[listener] = null;
+  }
+
+  raiseEventRequestOpenCatalogListener(project: Project, modelSelectedId: string) {
+    let me = this;
+    let e = new ProjectEventArg(me, project, modelSelectedId);
+    for (let index = 0; index < me.requestOpenConfigurationListener.length; index++) {
+      let callback = this.requestOpenCatalogListener[index];
+      callback(e);
+    }
+  }
+
+  raiseEventRequestOpenConfigurationListener(project: Project, modelSelectedId: string) {
+    let me = this;
+    let e = new ProjectEventArg(me, project, modelSelectedId);
+    for (let index = 0; index < me.requestOpenConfigurationListener.length; index++) {
+      let callback = this.requestOpenConfigurationListener[index];
       callback(e);
     }
   }
   //Project functions_ END***********
 
   //Product Line functions_ START***********
-  createLPS(project: Project, productLineName: string) {
-    return this.projectManager.createLps(project, productLineName);
+  createLPS(
+    project: Project,
+    productLineName: string,
+    type: string,
+    domain: string
+  ) {
+    return this.projectManager.createLps(
+      project,
+      productLineName,
+      type,
+      domain
+    );
   }
 
   addNewProductLineListener(listener: any) {
@@ -611,16 +1191,52 @@ export default class ProjectService {
   //Adaptation functions_ END***********
 
   //createDomainEngineeringModel functions_ START***********
-  createDomainEngineeringModel(project: Project, languageType: string) {
+  createDomainEngineeringModel(
+    project: Project,
+    languageType: string,
+    languageId: string,
+    name: string,
+    description: string,
+    author: string,
+    source: string
+  ) {
     return this.projectManager.createDomainEngineeringModel(
       project,
       languageType,
-      this.productLineSelected
+      languageId,
+      this.productLineSelected,
+      name,
+      description,
+      author,
+      source
+    );
+  }
+  createScopeModel(
+    project: Project,
+    languageType: string,
+    languageId: string,
+    name: string,
+    description: string,
+    author: string,
+    source: string
+  ) {
+    return this.projectManager.createScopeModel(
+      project,
+      languageType,
+      languageId,
+      this.productLineSelected,
+      name,
+      description,
+      author,
+      source
     );
   }
 
   addNewDomainEngineeringModelListener(listener: any) {
     this.newDomainEngineeringModelListeners.push(listener);
+  }
+  addScopeModelListener(listener: any) {
+    this.scopeModelListeners.push(listener);
   }
 
   removeNewDomainEngineeringModelListener(listener: any) {
@@ -639,14 +1255,32 @@ export default class ProjectService {
       callback(e);
     }
   }
+
+  raiseEventScopeModel(model: Model) {
+    const e = new NewModelEventArg(this, this._project, model);
+    this.scopeModelListeners.forEach((callback) => callback(e));
+  }
   //createDomainEngineeringModel functions_ END***********
 
   //createApplicationEngineeringModel functions_ START***********
-  createApplicationEngineeringModel(project: Project, languageType: string) {
+  createApplicationEngineeringModel(
+    project: Project,
+    languageType: string,
+    languageId: string,
+    name: string,
+    description: string,
+    author: string,
+    source: string
+  ) {
     return this.projectManager.createApplicationEngineeringModel(
       project,
       languageType,
-      this.productLineSelected
+      languageId,
+      this.productLineSelected,
+      name,
+      description,
+      author,
+      source
     );
   }
 
@@ -673,12 +1307,23 @@ export default class ProjectService {
   //createApplicationEngineeringModel functions_ END***********
 
   //createApplicationModel functions_ START***********
-  createApplicationModel(project: Project, languageType: string) {
+  createApplicationModel(project: Project,
+    languageType: string,
+    languageId: string,
+    name: string,
+    description: string,
+    author: string,
+    source: string) {
     return this.projectManager.createApplicationModel(
       project,
       languageType,
+      languageId,
       this.productLineSelected,
-      this.applicationSelected
+      this.applicationSelected,
+      name,
+      description,
+      author,
+      source
     );
   }
 
@@ -705,13 +1350,24 @@ export default class ProjectService {
   //createApplicationModel functions_ END***********
 
   //createAdaptationModel functions_ START***********
-  createAdaptationModel(project: Project, languageType: string) {
+  createAdaptationModel(project: Project,
+    languageType: string,
+    languageId: string,
+    name: string,
+    description: string,
+    author: string,
+    source: string) {
     return this.projectManager.createAdaptationModel(
       project,
       languageType,
+      languageId,
       this.productLineSelected,
       this.applicationSelected,
-      this.adaptationSelected
+      this.adaptationSelected,
+      name,
+      description,
+      author,
+      source
     );
   }
 
@@ -752,8 +1408,6 @@ export default class ProjectService {
   open() {
     //open file
   }
-
-
 
   duplicateObject(obj: any) {
     let str = JSON.stringify(obj);
@@ -815,8 +1469,16 @@ export default class ProjectService {
     return r;
   }
 
+  findModelById(project: Project, uid: any) {
+    return ProjectUseCases.findModelById(project, uid);
+  }
+
   findModelElementById(model: Model, uid: any) {
     return ProjectUseCases.findModelElementById(model, uid);
+  }
+
+  findModelElementByName(model: Model, name: any) {
+    return ProjectUseCases.findModelElementByName(model, name);
   }
 
   findModelRelationshipById(model: Model, uid: any) {
@@ -836,14 +1498,500 @@ export default class ProjectService {
   }
 
   findModelByName(type: string, modelName: string, neightborModel: Model) {
-    return ProjectUseCases.findModelByName(this._project, type, modelName, neightborModel.id);
+    return ProjectUseCases.findModelByName(
+      this._project,
+      type,
+      modelName,
+      neightborModel.id
+    );
   }
 
   findModelElementByIdInProject(elementId: string) {
-    return ProjectUseCases.findModelElementByIdInProject(this._project, elementId);
+    return ProjectUseCases.findModelElementByIdInProject(
+      this._project,
+      elementId
+    );
+  }
+
+  findModelElementPropertyByIdInProject(propertyId: string) {
+    return ProjectUseCases.findModelElementPropertyByIdInProject(
+      this._project,
+      propertyId
+    );
   }
 
   generateId() {
     return ProjectUseCases.generateId();
+  }
+
+  visualizeModel() { }
+
+  //This function updates the selection status of the model
+  //elements based on an incoming configuration under the form
+  //of a project.
+  //It is used when we call the translator from the UI
+  updateSelection(projectInResponse: Project, modelSelectedId: string) {
+    const modelLookupResult = this.projectManager.updateSelection(
+      this._project,
+      projectInResponse,
+      modelSelectedId
+    );
+    this.reSelectModel(modelLookupResult);
+  }
+
+  //Reset the selection on the currently selected model
+  resetModelConfig() {
+    const modelLookupResult = this.projectManager.findModel(
+      this._project,
+      this.getTreeIdItemSelected()
+    );
+    if (modelLookupResult) {
+      this.projectManager.resetSelection(modelLookupResult);
+      // We should have the enum available here
+      this.reSelectModel(modelLookupResult);
+    }
+  }
+
+  lookupAndReselectModel() {
+    const modelLookupResult = this.projectManager.findModel(
+      this._project,
+      this.getTreeIdItemSelected()
+    );
+    if (modelLookupResult) {
+      this.reSelectModel(modelLookupResult);
+    }
+  }
+
+  reSelectModel(modelLookupResult: ModelLookupResult) {
+    switch (modelLookupResult.modelType) {
+      case "Domain":
+        this.modelDomainSelected(
+          modelLookupResult.plIdx,
+          modelLookupResult.modelIdx
+        );
+        break;
+      case "Application":
+        this.modelApplicationSelected(
+          modelLookupResult.plIdx,
+          modelLookupResult.appIdx,
+          modelLookupResult.modelIdx
+        );
+        break;
+      case "Adaptation":
+        this.modelAdaptationSelected(
+          modelLookupResult.plIdx,
+          modelLookupResult.appIdx,
+          modelLookupResult.adapIdx,
+          modelLookupResult.modelIdx
+        );
+        break;
+      case "ApplicationEng":
+        this.modelApplicationEngSelected(
+          modelLookupResult.plIdx,
+          modelLookupResult.modelIdx
+        );
+        break;
+      default:
+        console.error("Unknown model type: " + modelLookupResult.modelType);
+        console.error("could not reset model config");
+        break;
+    }
+  }
+
+  getProductLineDomainsList() {
+    let list = [
+      "Advertising and Marketing",
+      "Agriculture",
+      "Architecture and Design",
+      "Art and Culture",
+      "Automotive",
+      "Beauty and Wellness",
+      "Childcare and Parenting",
+      "Construction",
+      "Consulting and Professional Services",
+      "E-commerce",
+      "Education",
+      "Energy and Utilities",
+      "Environmental Services",
+      "Event Planning and Management",
+      "Fashion and Apparel",
+      "Finance and Banking",
+      "Food and Beverage",
+      "Gaming and Gambling",
+      "Government and Public Sector",
+      "Healthcare",
+      "Hospitality and Tourism",
+      "Insurance",
+      "Legal Services",
+      "Manufacturing",
+      "Media and Entertainment",
+      "Non-profit and Social Services",
+      "Pharmaceuticals",
+      "Photography and Videography",
+      "Printing and Publishing",
+      "Real Estate",
+      "Research and Development",
+      "Retail",
+      "Security and Surveillance",
+      "Software and Web Development",
+      "Sports and Recreation",
+      "Telecommunications",
+      "Transportation and Logistics",
+      "Travel and Leisure",
+      "Wholesale and Distribution",
+      "IoT",
+      "IndustrialControlSystems",
+      "HealthCare",
+      "Communication",
+      "Military",
+      "WebServices",
+      "Transportation",
+      "SmartPhones",
+      "PublicAdministration",
+      "Multi-Domain",
+      "Banking",
+      "EmergencyServices",
+      "Cloud-Provider",
+    ];
+    return list;
+  }
+
+  getProductLineTypesList() {
+    let list = ["Software", "System"];
+    return list;
+  }
+
+  generateName(model: Model, type: string) {
+    for (let i = 1; i < 100000000; i++) {
+      let name = type + " " + i;
+      let element = this.findModelElementByName(model, name);
+      if (!element) {
+        return name;
+      }
+    }
+    return this.generateId();
+  }
+
+  resetConfiguration(model: Model) {
+    ProjectUseCases.resetConfiguration(model);
+    this.raiseEventUpdateProject(this._project, model.id);
+  }
+
+  async solveConsistencyAttributeModel(applicationModel: Model) {
+    const domainModel = this.findModelById(this.project, applicationModel.sourceModelIds[0]);
+    const domainModelElementsBackup = JSON.stringify(domainModel.elements);
+    type parsedElements = {}
+    const applicationElements = applicationModel.elements
+    const getAppFeaturesId = applicationModel.elements.map(element => element.name)
+    domainModel.elements.forEach((domElement) => {
+      if (domElement.type === "ConcreteFeature" || domElement.type === "RootFeature") {
+        if (getAppFeaturesId.includes(domElement.name)) {
+          domElement.properties[0].value = "Selected";
+        } else {
+          domElement.properties[0].value = "Unselected";
+        }
+      }
+    })
+    const query_object = new Query({
+      solver: "swi",
+      operation: "sat"
+    });
+    const result = await runQueryFromModel(
+      this,
+      "https://app.variamos.com/semantic_translator/query",
+      query_object,
+      applicationModel.sourceModelIds[0]
+    );
+    domainModel.elements = JSON.parse(domainModelElementsBackup);
+    console.log(result);
+    applicationModel.inconsistent = !result;
+    if (result) {
+      alertify.success(`${applicationModel.name} is consistent with the domain model.`, 0);
+      applicationModel.consistencyError = null;
+    } else {
+      const errorMessage = `${applicationModel.name} is not consistent with the domain model.`;
+      applicationModel.consistencyError = errorMessage;
+      alertify.error(errorMessage, 0);
+
+    }
+    this.raiseEventUpdateProject(this._project, applicationModel.id);
+  }
+
+  async solveConsistency(appModel: Model) {
+    const domainModel = this.project.productLines[0].domainEngineering.models[0];
+    const domainElementsBackup = JSON.stringify(domainModel.elements);
+    console.log(domainModel.elements);
+    const getAppFeaturesId = appModel.elements.map(element => element.name)
+    domainModel.elements.forEach((domElement) => {
+      if (domElement.type === "ConcreteFeature" || domElement.type === "RootFeature") {
+        if (getAppFeaturesId.includes(domElement.name)) {
+          domElement.properties[0].value = "Selected";
+        } else {
+          domElement.properties[0].value = "Unselected";
+        }
+      }
+    })
+    const query_object = new Query({
+      solver: "swi",
+      operation: "sat"
+    });
+    const result = await runQueryFromModel(
+      this,
+      "https://app.variamos.com/semantic_translator/query",
+      query_object,
+      appModel.sourceModelIds[0]
+    );
+    domainModel.elements = JSON.parse(domainElementsBackup);
+    console.log(result);
+    appModel.inconsistent = !result;
+    if (result) {
+      alertify.success(`${appModel.name} is consistent with the domain model.`, 0);
+      appModel.consistencyError = null;
+    } else {
+      const errorMessage = `${appModel.name} is not consistent with the domain model.`;
+      appModel.consistencyError = errorMessage;
+      alertify.error(errorMessage, 0);
+
+    }
+    this.raiseEventUpdateProject(this._project, appModel.id);
+  }
+
+  async solveConsistencyForAll(domainModel: Model) {
+    const appModels = this.project.productLines[0].applicationEngineering.applications.flatMap(app => {
+      return app.models.filter(model => model.sourceModelIds && model.sourceModelIds[0] === domainModel.id);
+    });
+    const domainElementsBackup = JSON.stringify(domainModel.elements);
+    appModels.forEach(async appModel => {
+      const getAppFeaturesId = appModel.elements.map(element => element.name)
+      domainModel.elements
+        .forEach((domElement) => {
+          if (domElement.type === "ConcreteFeature" || domElement.type === "RootFeature") {
+            if (getAppFeaturesId.includes(domElement.name)) {
+              domElement.properties[0].value = "Selected";
+            } else {
+              domElement.properties[0].value = "Unselected";
+            }
+          }
+        })
+      const query_object = new Query({
+        solver: "swi",
+        operation: "sat"
+      });
+      const result = await runQueryFromModel(
+        this,
+        "https://app.variamos.com/semantic_translator/query",
+        query_object,
+        appModel.sourceModelIds[0]
+      );
+      appModel.inconsistent = !result;
+      domainModel.elements = JSON.parse(domainElementsBackup);
+      this.raiseEventUpdateProject(this._project, domainModel.id);
+
+      if (result) {
+        alertify.success(`${appModel.name} is consistent with the domain model.`, 0);
+        appModel.consistencyError = null;
+      } else {
+        const errorMessage = `${appModel.name} is not consistent with the domain model.`;
+        appModel.consistencyError = errorMessage;
+        alertify.error(errorMessage, 0);
+      }
+    })
+  }
+  async getCatalogData(): Promise<Array<{ Property: string; Value: string }>> {
+    try {
+      const currentLanguage = this.currentLanguage;
+      if (!currentLanguage) {
+        throw new Error("No modeling language selected");
+      }
+
+      // Parsear el abstractSyntax del lenguaje actual
+      const abstractSyntax = JSON.parse(currentLanguage.abstractSyntax);
+
+      // Verificar que existen elementos en la sintaxis abstracta
+      if (!abstractSyntax || !abstractSyntax.elements) {
+        throw new Error("Invalid abstract syntax structure for the selected language");
+      }
+
+      // Extraer propiedades de cada elemento
+      const catalogData: Array<{ Property: string; Value: string }> = [];
+      for (const elementName in abstractSyntax.elements) {
+        const element = abstractSyntax.elements[elementName];
+        if (element.properties && Array.isArray(element.properties)) {
+          for (const property of element.properties) {
+            catalogData.push({
+              Property: `${elementName} - ${property.name}`,
+              Value: property.possibleValues || "N/A",
+            });
+          }
+        }
+      }
+
+      return catalogData;
+    } catch (error) {
+      console.error("Error retrieving catalog data:", error);
+      return [];
+    }
+  }
+
+
+
+  checkConsistency(model: Model) {
+    this.resetConfiguration(model);
+    if (model.type === 'Application feature tree')
+      this.solveConsistency(model);
+    else {
+      this.solveConsistencyForAll(model);
+    }
+  }
+
+  formatApplicationConfiguration(appModel: Model) {
+    let config = `[${appModel.elements.length}] `;
+    config += appModel.elements.map(element => element.name).join(", ")
+    return config;
+  }
+
+  async copyApplicationConfiguration(appModel: Model) {
+    try {
+      await navigator.clipboard.writeText(this.formatApplicationConfiguration(appModel));
+    } catch (error) {
+      console.error("Failed to copy text: ", error);
+    }
+
+  }
+
+  async copyDomainConfiguration(domainModel: Model) {
+    const appModels = this.project.productLines[0].applicationEngineering.applications.flatMap(app => {
+      return app.models.filter(model => model.sourceModelIds && model.sourceModelIds[0] === domainModel.id);
+    });
+    let configs = ''
+    appModels.forEach(async appModel => {
+      let config = this.formatApplicationConfiguration(appModel)
+      configs += `{${config}} `
+    }
+    )
+    try {
+      alert(configs)
+      await navigator.clipboard.writeText(configs);
+    } catch (error) {
+      alert(configs)
+      console.error("Failed to copy text: ", error);
+    }
+
+  }
+
+
+  copyModelConfiguration(model: Model) {
+    console.log(model);
+    if (model.type === 'Application feature tree')
+      this.copyApplicationConfiguration(model);
+    else {
+      this.copyDomainConfiguration(model);
+    }
+  }
+  async drawCoreFeatureTree() {
+    const query_object = new Query({
+      "solver": "minizinc",
+      "operation": "sat",
+      "iterate_over": [
+        {
+          "model_object": "element",
+          "object_type": [
+            "ConcreteFeature",
+            "RootFeature",
+            "AbstractFeature"
+          ],
+          "with_value": 0
+        }
+      ]
+    });
+    const result = await runQuery(
+      this,
+      "https://app.variamos.com/semantic_translator/query",
+      query_object,
+    );
+    const formattedResults = result.map((elem) => [
+      elem[0].replace("UUID_", "").replaceAll("_", "-"),
+      elem[1]])
+    formattedResults.forEach(elem => {
+      let esdelcore = !elem[1];
+      const element = this.findModelElementByIdInProject(elem[0]);
+      const property = new Property('Core', esdelcore, "Boolean", null, null, null, false, false, null, null, null, null, null, null, null, null);
+      element.properties.push(property);
+      console.log(element.properties);
+    });
+    this.raiseEventUpdateProject(this._project, this.getTreeIdItemSelected());
+  }
+
+  // COLLABORATIVE FUNCTIONS START***********
+
+  shareProject = (project: string, ToUserEmail: string, role: string) => {
+    return this.projectPersistenceUseCases.shareProject(project, ToUserEmail, role);
+  }
+
+  removeCollaborator = (projectId: string, collaboratorId: string) => {
+    return this.projectPersistenceUseCases.removeCollaborator(projectId, collaboratorId,);
+  }
+
+  changeCollaboratorRole = (projectId: string, collaboratorId: string, role: string) => {
+    return this.projectPersistenceUseCases.changeCollaboratorRole(projectId, collaboratorId, role,);
+  }
+
+  async initUser(): Promise<any> {
+    try {
+      const user = await this.projectPersistenceUseCases.initUser();
+      this.user = user;
+    } catch (error) {
+      console.error("Error initializing user:", error);
+    }
+  }
+
+  handleCollaborativeProject(projectId: string, projectInfo: ProjectInformation) {
+    return handleCollaborativeProject(projectId, projectInfo);
+  }
+
+  observeModelState(projectId: string, modelId: string, callback: (state: any, changes?: any) => void) {
+    return observeModelState(projectId, modelId, callback);
+  }
+
+  updateModelState(projectId: string, modelId: string, updateFn: (state: any) => void) {
+    return updateModelState(projectId, modelId, updateFn);
+  }
+
+  getProjectProvider(projectId: string): any {
+    return getProjectProvider(projectId);
+
+
+  }
+
+  createHistoryEvent(historyEvent: ProjectHistory): Promise<any> {
+    return this.projectPersistenceUseCases.createHistoryEvent(historyEvent);
+  }
+
+  getProjectHistory(projectId: string): Promise<any> {
+    return this.projectPersistenceUseCases.getProjectHistory(projectId);
+  }
+
+  createProjectAnnotation(annotation: ProjectAnnotation): Promise<any> {
+    return this.projectPersistenceUseCases.createProjectAnnotation(annotation);
+  }
+
+  getProjectAnnotations(modelId: string): Promise<any> {
+    return this.projectPersistenceUseCases.getProjectAnnotations(modelId);
+  }
+
+  updateProjectAnnotation(annotationId: string, annotation: ProjectAnnotation): Promise<any> {
+    return this.projectPersistenceUseCases.updateProjectAnnotation(annotationId, annotation);
+  }
+
+  deleteProjectAnnotation(annotationId: string): Promise<any> {
+    return this.projectPersistenceUseCases.deleteProjectAnnotation(annotationId);
+  }
+
+  resolveProjectAnnotation(annotationId: string): Promise<any> {
+    return this.projectPersistenceUseCases.resolveProjectAnnotation(annotationId);
+  }
+
+  unresolveProjectAnnotation(annotationId: string): Promise<any> {
+    return this.projectPersistenceUseCases.unresolveProjectAnnotation(annotationId);
   }
 }

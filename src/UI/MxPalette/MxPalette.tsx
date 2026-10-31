@@ -11,6 +11,7 @@ import { mxStencil } from "mxgraph";
 import * as alertify from "alertifyjs";
 import { stringify } from "querystring";
 import { join } from "path";
+import MxgraphUtils from "../../Infraestructure/Mxgraph/MxgraphUtils";
 import "./MxPalette.css"
 
 interface Props {
@@ -37,9 +38,7 @@ export default class MxPalette extends Component<Props, State> {
   }
 
   projectService_addSelectedModelListener(e: any) {
-    this.currentModel = e.model;
-    this.createPalette(e.model.name);
-    this.forceUpdate();
+    this.loadModel(e.model);
   }
 
   componentDidMount() {
@@ -50,11 +49,21 @@ export default class MxPalette extends Component<Props, State> {
     me.props.projectService.addSelectedModelListener(
       this.projectService_addSelectedModelListener
     );
+    let model=me.props.projectService.currentModel;
+    me.loadModel(model);
   }
 
-  createPalette(modelName: string) {
+  loadModel(model : Model) {
+    this.currentModel = model;
+    if (model) {
+      this.createPalette(model.type);
+      this.forceUpdate();
+    }
+  }
+
+  createPalette(modelType: string) {
     this.props.projectService.getStyleDefinition(
-      modelName,
+      modelType,
       this.callbackGetStyle
     );
   }
@@ -68,6 +77,10 @@ export default class MxPalette extends Component<Props, State> {
       if (element.design.includes("shape=")) {
         style = element.design;
       }
+    } 
+    style+=";whiteSpace=wrap";
+    if(""+element.resizable=="false"){
+      style+=";resizable=0;";
     }
     let vertex = new mx.mxCell(
       node,
@@ -89,37 +102,59 @@ export default class MxPalette extends Component<Props, State> {
 
     let languageDefinition: any =
       me.props.projectService.getLanguageDefinition(
-        "" + me.currentModel.name
+        "" + me.currentModel.type
       );
 
+    let type = vertex.getAttribute("type");
+    let instanceOfId = vertex.getAttribute("instanceOfId");
+    let name = me.props.projectService.generateName(me.currentModel, type);
+
+    let parentsAllowed = [null];
+    if (languageDefinition.abstractSyntax.restrictions) {
+      if (languageDefinition.abstractSyntax.restrictions.parent_child) {
+        let pc = languageDefinition.abstractSyntax.restrictions.parent_child;
+        for (let i = 0; i < pc.length; i++) {
+          const rest = pc[i];
+          if (rest.childElement == type) {
+            parentsAllowed = rest.parentElement;
+          }
+        }
+      }
+    }
+
     let parentId = null;
+    let parentType = null;
     if (parentCell) {
       if (parentCell.value) {
         parentId = parentCell.value.getAttribute("uid");
+        parentType = parentCell.value.getAttribute("type");
       }
     }
- 
-    let type = vertex.getAttribute("type");
-    let instanceOfId = vertex.getAttribute("instanceOfId");
-    let name = type + " 1";
+
+    if (!parentsAllowed.includes(parentType)) {
+      throw ("Child not allowed by the parent element.");
+    } else {
+      //todo: min max
+    }
+
     let element: any;
 
     if (instanceOfId) {
-      name=vertex.getAttribute("label") + " 1";
+      name = vertex.getAttribute("label") + " 1";
       let instanceOf = me.props.projectService.findModelElementByIdInProject(instanceOfId);
-      element=me.props.projectService.duplicateObject(instanceOf);
-      element.id=me.props.projectService.generateId();
-      element.parentId=null;
-      element.instanceOfId=instanceOfId;
-    }else{
-        let properties = [];
-        element  = new Element(name, type, properties, parentId);
+      element = me.props.projectService.duplicateObject(instanceOf);
+      element.id = me.props.projectService.generateId();
+      element.parentId = null;
+      element.instanceOfId = instanceOfId;
+    } else {
+      let properties = [];
+      element = new Element(name, type, properties, parentId);
     }
 
     //aqui se llamaría a la api de restricciones y  mostrar mensajes de error
     // o sino continuar
 
-    const previuosModel = JSON.stringify(this.currentModel); 
+    const previuosModel = JSON.stringify(this.currentModel);
     element.x = vertex.geometry.x;
     element.y = vertex.geometry.y;
     element.width = vertex.geometry.width;
@@ -128,7 +163,12 @@ export default class MxPalette extends Component<Props, State> {
     if (def.properties) {
       for (let i = 0; i < def.properties.length; i++) {
         const p = def.properties[i];
-        const property = new Property(p.name, p.value, p.type, p.options, p.linked_property, p.linked_value, false, true, p.comment, p.possibleValues);
+        const property = new Property(p.name, p.value, p.type, p.options, p.linked_property, p.linked_value, false, true, p.comment, p.possibleValues, p.possibleValuesLinks, p.minCardinality, p.maxCardinality, p.constraint, p.defaultValue, p.autocompleteSource);
+        if (p.defaultValue=="") {
+          property.value=p.defaultValue;
+        }else if(p.defaultValue){
+          property.value=p.defaultValue;
+        }
         if (p.linked_property) {
           property.display = false;
         }
@@ -143,10 +183,7 @@ export default class MxPalette extends Component<Props, State> {
         element.properties.push(property);
       }
     }
-
-
-
-
+ 
     this.currentModel?.elements?.push(element);
 
     let callback = function (data: any) {
@@ -157,13 +194,25 @@ export default class MxPalette extends Component<Props, State> {
         newCells[0].setAttribute("uid", element.id);
         newCells[0].setAttribute("label", element.name);
         newCells[0].setAttribute("title", element.name);
-        newCells[0].setAttribute("name", element.name);
+        newCells[0].setAttribute("Name", element.name);
+        for (let i = 0; i < element.properties.length; i++) {
+          const p = element.properties[i];
+          newCells[0].setAttribute(p.name, p.value);
+        }
+
+
         graph.setSelectionCells(newCells);
         // let g = vertex.geometry;
 
         // var v2 = graph.insertVertex(newCells[0], null, "World!", 0, 0, 20, 20);
         // newCells[0].collapsed = false;
         graph.getModel().endUpdate();
+
+
+        me.props.projectService.raiseEventCreatedElement(
+          me.currentModel,
+          element
+        );
 
 
         me.props.projectService.raiseEventUpdatedElement(
@@ -176,9 +225,11 @@ export default class MxPalette extends Component<Props, State> {
           element
         );
 
-        if (data.data.message !== "")
+        if (data.data.message !== ""){
           alertify.error("Validate: " + data.data.message);
-      } else {
+        }
+      }
+      else {
         alertify.error("Validate: " + data.data.message);
         me.currentModel = Object.assign(
           me.currentModel,
@@ -186,7 +237,7 @@ export default class MxPalette extends Component<Props, State> {
         );
         // me.currentModel = validateModelRestriction;
         // validateModelRestriction = me.currentModel;
-        graph.getModel().endUpdate();
+        // graph.getModel().endUpdate();
       }
       me.props.projectService.saveProject();
     };
@@ -200,9 +251,10 @@ export default class MxPalette extends Component<Props, State> {
     graph.multiplicities = [];
 
     let divToolbar: any = document.getElementById("graph_palette");
-    divToolbar.classList.add("list-inline");
+    //divToolbar.classList.add("list-inline");
     if (!divToolbar) {
-      throw new Error("The element #portal wasn't found");
+      return null;
+    //throw new Error("The element #portal wasn't found");
     }
     divToolbar.innerHTML = "";
     const toolbar = new mx.mxToolbar(divToolbar);
@@ -213,32 +265,58 @@ export default class MxPalette extends Component<Props, State> {
       const elementAbstract = languageDefinition.abstractSyntax.elements[elementName];
       if (elementAbstract.instance) {
         me.createElementInstanceInPalette(graph, languageDefinition, elementName, divToolbar, toolbar);
-      } else {  
-        let elementConcrete= languageDefinition.concreteSyntax.elements[elementName];
+      } else {
+        let elementConcrete = languageDefinition.concreteSyntax.elements[elementName];
         let vertexToClone = this.createVertex(elementName, elementConcrete);
-        me.createElementInPalette(graph, languageDefinition,elementName, elementConcrete, vertexToClone, divToolbar, toolbar);
+        me.createElementInPalette(graph, languageDefinition, elementName, elementConcrete, vertexToClone, divToolbar, toolbar);
       }
     }
 
+    let dic = [];
     if (languageDefinition.abstractSyntax.relationships) {
       for (elementName in languageDefinition.abstractSyntax.relationships) {
-        const relationship =
-          languageDefinition.abstractSyntax.relationships[elementName];
-        let mul = new mx.mxMultiplicity(
-          true,
-          relationship.source,
-          null,
-          null,
-          relationship.min,
-          relationship.max,
-          relationship.target,
-          "Only 1 target is allowed",
-          "Only " + relationship.target.join(', ') + " targets allowed",
-          true
-        );
-        graph.multiplicities.push(mul);
+        const relationship = languageDefinition.abstractSyntax.relationships[elementName];
+        if (!dic[relationship.source]) {
+          dic[relationship.source] = [];
+        }
+        dic[relationship.source] = dic[relationship.source].concat(relationship.target);
       }
     }
+    for (var key in dic) {
+      let mul = new mx.mxMultiplicity(
+        true,
+        key,
+        null,
+        null,
+        0,
+        10000000,
+        dic[key],
+        "Only 1 target is allowed",
+        "Only " + dic[key].join(', ') + " targets allowed",
+        true
+      );
+      graph.multiplicities.push(mul);
+    }
+
+    // if (languageDefinition.abstractSyntax.relationships) {
+    //   for (elementName in languageDefinition.abstractSyntax.relationships) {
+    //     const relationship =
+    //       languageDefinition.abstractSyntax.relationships[elementName];
+    //     let mul = new mx.mxMultiplicity(
+    //       true,
+    //       relationship.source,
+    //       null,
+    //       null,
+    //       relationship.min,
+    //       relationship.max,
+    //       relationship.target,
+    //       "Only 1 target is allowed",
+    //       "Only " + relationship.target.join(', ') + " targets allowed",
+    //       true
+    //     );
+    //     graph.multiplicities.push(mul);
+    //   }
+    // }
 
     // for (const key in language.relationships) {
     //     const relationship = language.relationships[key];
@@ -266,21 +344,21 @@ export default class MxPalette extends Component<Props, State> {
     let model = me.props.projectService.findModelByName(typeFolder, modelName, me.currentModel);
     if (model) {
       for (let i = 0; i < model.elements.length; i++) {
-        const element = model.elements[i]; 
-        if (element.type==elementType) {
-          let elementConcrete=languageDefinition.concreteSyntax.elements[elementType];
+        const element = model.elements[i];
+        if (element.type == elementType) {
+          let elementConcrete = languageDefinition.concreteSyntax.elements[elementType];
           let vertexToClone = this.createVertex(elementType, elementConcrete);
           vertexToClone.setAttribute("label", element.name);
           vertexToClone.setAttribute("instanceOfId", element.id);
-          elementConcrete.label=element.name;
+          elementConcrete.label = element.name;
           me.createElementInPalette(graph, languageDefinition, element.type, elementConcrete, vertexToClone, divToolbar, toolbar);
         }
       }
     }
   }
 
-  createElementInPalette(graph: any, languageDefinition: any, type:any, element:any, vertexToClone:any,  divToolbar: any, toolbar: any) {
-    let me = this; 
+  createElementInPalette(graph: any, languageDefinition: any, type: any, element: any, vertexToClone: any, divToolbar: any, toolbar: any) {
+    let me = this;
     let drapAndDropCreation = function (graph: any, evt: any, cell: any) {
       try {
         graph.stopEditing(false);
@@ -309,8 +387,11 @@ export default class MxPalette extends Component<Props, State> {
       let shape = atob(element.draw);
       let ne: any = mx.mxUtils.parseXml(shape).documentElement;
       ne.setAttribute("name", type);
+      MxgraphUtils.modifyShape(ne);
+      let s: any = mx.mxStencil;
+      s.allowEval = true;
       let stencil = new mx.mxStencil(ne);
-      mx.mxStencilRegistry.addStencil( type, stencil);
+      mx.mxStencilRegistry.addStencil(type, stencil);
     }
     divToolbar.appendChild(mdiv);
     let img = toolbar.addMode(element.label, iconUrl, drapAndDropCreation);
@@ -323,7 +404,7 @@ export default class MxPalette extends Component<Props, State> {
 
     let label = document.createElement("label");
     label.innerText = element.label;
-    
+
 
     mdiv.classList.add("pallete-div");
     mdiv.classList.add("csstooltip");
@@ -358,7 +439,7 @@ export default class MxPalette extends Component<Props, State> {
     return (
       <div className="MxPalette">
         <div
-          style={{fontSize: 8}}
+          style={{ fontSize: 10 }}
           ref={this.containerRef}
           className="MxPaletteContainter"
           id="graph_palette"

@@ -3,12 +3,71 @@ import ProjectService from "../../Application/Project/ProjectService";
 import { Language } from "../../Domain/ProductLineEngineering/Entities/Language";
 import * as alertify from "alertifyjs";
 import { ExternalFuntion } from "../../Domain/ProductLineEngineering/Entities/ExternalFuntion";
+import Modal from "react-bootstrap/Modal";
+import Button from "react-bootstrap/Button";
+import treeCollaborationService from "../../DataProvider/Services/collab/treeCollaborationService";
+import { Dropdown, DropdownButton } from 'react-bootstrap';
 import "./TreeMenu.css";
+import { ProductLine } from "../../Domain/ProductLineEngineering/Entities/ProductLine";
+import { ConfigurationInformation } from "../../Domain/ProductLineEngineering/Entities/ConfigurationInformation";
+import ConfigurationManagement from "../ConfigurationManagement/configurationManagement";
+import { ScopeSPL } from "../../Domain/ProductLineEngineering/Entities/ScopeSPL";
+import ScopeModal from "../Scope/ScopeModal";
+import ModelInformationEditor from "./ModelInformationEditor";
+import { Model } from "../../Domain/ProductLineEngineering/Entities/Model";
+import { ProjectHistory } from "../../Domain/ProductLineEngineering/Entities/ProjectHistory";
+import { HistoryActionType, HistoryEntityType } from "../../Domain/ProductLineEngineering/Enums/historyEnum";
+import historyCollaborationService from "../../DataProvider/Services/collab/historyCollaborationService";
 
 interface Props {
   projectService: ProjectService;
+  contextMenuX: number;
+  contextMenuY: number;
+  showContextMenu: boolean;
+  onContextMenuHide: any;
 }
-interface State {}
+interface State {
+  menu: boolean,
+  modalTittle: string,
+  modalInputText: string,
+  modalInputValue: string,
+  query: string,
+  selectedFunction: number,
+  optionAllowModelEnable: boolean,
+  optionScopeEnable: boolean,
+  optionAllowModelScope: boolean,
+  optionAllowModelDomain: boolean,
+  optionAllowModelApplication: boolean,
+  optionAllowModelAdaptation: boolean,
+  optionAllowProductLine: boolean,
+  optionAllowApplication: boolean,
+  optionAllowAdaptation: boolean,
+  optionAllowProperties: boolean,
+  optionAllowRename: boolean,
+  optionAllowDelete: boolean,
+  optionAllowEFunctions: boolean,
+  optionAllowAnalyzeScope: boolean,
+  newSelected: string,
+  showPropertiesModal: boolean,
+  plDomains: string[],
+  plTypes: string[],
+  plDomain: string,
+  plType: string,
+  plName: string,
+  showContextMenu: boolean,
+  showEditorTextModal: boolean,
+  showModelInformationEditorModal: boolean,
+  showQueryModal: boolean,
+  showDeleteModal: boolean,
+  newModelLanguage?: Language,
+  showSaveConfigurationModal: boolean,
+  configurationName: string,
+  showConfigurationManagementModal: boolean,
+  showScopeManagementModal: boolean,
+  selectedScopeId?: string,
+  showScopeModal: boolean
+  model: Model
+}
 
 class TreeMenu extends Component<Props, State> {
   state = {
@@ -16,21 +75,47 @@ class TreeMenu extends Component<Props, State> {
     modalTittle: "",
     modalInputText: "",
     modalInputValue: "",
+    query: "",
+    selectedFunction: -1,
     optionAllowModelEnable: false,
+    optionScopeEnable: false,
+    optionAllowModelScope: false,
     optionAllowModelDomain: false,
     optionAllowModelApplication: false,
     optionAllowModelAdaptation: false,
     optionAllowProductLine: false,
     optionAllowApplication: false,
     optionAllowAdaptation: false,
+    optionAllowProperties: false,
     optionAllowRename: false,
     optionAllowDelete: false,
     optionAllowEFunctions: false,
+    optionAllowAnalyzeScope: false,
     newSelected: "default",
+    showPropertiesModal: false,
+    plDomains: ['Advertising and Marketing', 'Agriculture', 'Architecture and Design', 'Art and Culture', 'Automotive', 'Beauty and Wellness', 'Childcare and Parenting', 'Construction', 'Consulting and Professional Services', 'E-commerce', 'Education', 'Energy and Utilities', 'Environmental Services', 'Event Planning and Management', 'Fashion and Apparel', 'Finance and Banking', 'Food and Beverage', 'Gaming and Gambling', 'Government and Public Sector', 'Healthcare', 'Hospitality and Tourism', 'Insurance', 'Legal Services', 'Manufacturing', 'Media and Entertainment', 'Non-profit and Social Services', 'Pharmaceuticals', 'Photography and Videography', 'Printing and Publishing', 'Real Estate', 'Research and Development', 'Retail', 'Security and Surveillance', 'Software and Web Development', 'Sports and Recreation', 'Telecommunications', 'Transportation and Logistics', 'Travel and Leisure', 'Wholesale and Distribution', "IoT", "IndustrialControlSystems", "HealthCare", "Communication", "Military", "WebServices", "Transportation", "SmartPhones", "PublicAdministration", "Multi-Domain", "Banking", "EmergencyServices", "Cloud-Provider"],
+    plTypes: ['Software', 'System'],
+    plDomain: 'Agriculture',
+    plType: 'System',
+    plName: null,
+    showContextMenu: false,
+    showEditorTextModal: false,
+    showModelInformationEditorModal: false,
+    showQueryModal: false,
+    showDeleteModal: false,
+    newModelLanguage: null,
+    showSaveConfigurationModal: false,
+    configurationName: "Configuration 1",
+    showConfigurationManagementModal: false,
+    showScopeManagementModal: false,
+    selectedScopeId: undefined,
+    showScopeModal: false,
+    model: null
   };
 
   constructor(props: any) {
     super(props);
+
 
     this.addNewProductLine = this.addNewProductLine.bind(this);
     this.addNewApplication = this.addNewApplication.bind(this);
@@ -41,34 +126,605 @@ class TreeMenu extends Component<Props, State> {
     this.addNewAdaptationModel = this.addNewAdaptationModel.bind(this);
     this.addNewEModel = this.addNewEModel.bind(this);
 
-    this.projectService_addListener =
-      this.projectService_addListener.bind(this);
+    this.projectService_addListener = this.projectService_addListener.bind(this);
     this.handleUpdateEditorText = this.handleUpdateEditorText.bind(this);
     this.handleUpdateNewSelected = this.handleUpdateNewSelected.bind(this);
+    //Query bindings
+    this.runQuery = this.runQuery.bind(this);
+    this.updateQuery = this.updateQuery.bind(this);
+    this.setSelectedFunction = this.setSelectedFunction.bind(this);
+    //End Query bindings
     this.addNewFolder = this.addNewFolder.bind(this);
     this.updateModal = this.updateModal.bind(this);
     this.removeHidden = this.removeHidden.bind(this);
     this.viewMenuTree_addListener = this.viewMenuTree_addListener.bind(this);
     this.deleteItemProject = this.deleteItemProject.bind(this);
     this.renameItemProject = this.renameItemProject.bind(this);
+    this.saveConfiguration = this.saveConfiguration.bind(this);
+    this.showSaveConfigurationModal = this.showSaveConfigurationModal.bind(this);
     this.onEnterModal = this.onEnterModal.bind(this);
     this.callExternalFuntion = this.callExternalFuntion.bind(this);
+
+
+    //handle editortext modal
+    this.showEditorTextModal = this.showEditorTextModal.bind(this);
+    this.hideEditorTextModal = this.hideEditorTextModal.bind(this);
+
+    //handle query modal
+    this.showQueryModal = this.showQueryModal.bind(this);
+    this.hideQueryModal = this.hideQueryModal.bind(this);
+
+    //handle delete modal
+    this.showDeleteModal = this.showDeleteModal.bind(this);
+    this.hideDeleteModal = this.hideDeleteModal.bind(this);
+
+    //handle properties modal
+    this.showPropertiesModal = this.showPropertiesModal.bind(this);
+    this.hidePropertiesModal = this.hidePropertiesModal.bind(this);
+    this.saveProperties = this.saveProperties.bind(this);
+
+    this.selectProductLineNameChange = this.selectProductLineNameChange.bind(this);
+    this.selectProductLineDomainChange = this.selectProductLineDomainChange.bind(this);
+    this.selectProductLineTypeChange = this.selectProductLineTypeChange.bind(this);
   }
 
-  callExternalFuntion(efunction: ExternalFuntion): void {
-    this.props.projectService.callExternalFuntion(efunction);
+  selectProductLineNameChange(e) {
+    let me = this;
+    this.setState({
+      plName: e.target.value
+    })
+  }
+
+  selectProductLineDomainChange(e) {
+    let me = this;
+    this.setState({
+      plDomain: e.target.value
+    })
+  }
+
+  selectProductLineTypeChange(e) {
+    let me = this;
+    this.setState({
+      plType: e.target.value
+    })
+  }
+
+  showPropertiesModal(e) {
+    let me = this;
+    let pl: ProductLine = me.props.projectService.getProductLineSelected();
+    this.setState({
+      showPropertiesModal: true,
+      plName: pl.name,
+      plDomain: pl.domain,
+      plType: pl.type
+    })
+    this.hideContextMenu();
+    me.forceUpdate();
+  }
+
+  hidePropertiesModal() {
+    this.setState({ showPropertiesModal: false })
+  }
+
+  showEditorTextModal() {
+    this.setState({ showEditorTextModal: true })
+  }
+
+  hideEditorTextModal() {
+    this.setState({ showEditorTextModal: false })
+  }
+
+  showModelPropertiesModal = () => {
+    let me = this;
+    let project = me.props.projectService.project;
+    let modelId = me.props.projectService.getTreeIdItemSelected();
+    let model = me.props.projectService.findModelById(project, modelId);
+    this.setState({
+      model: { ...model },
+      showModelInformationEditorModal: true
+    })
+  }
+
+  showModelInformationEditorModal(model: Model) {
+    this.setState({
+      model: { ...model },
+      showModelInformationEditorModal: true
+    })
+  }
+
+  hideModelInformationEditorModal() {
+    this.setState({ showModelInformationEditorModal: false })
+  }
+
+  showQueryModal() {
+    this.setState({ showQueryModal: true })
+  }
+
+  hideQueryModal() {
+    this.setState({ showQueryModal: false })
+  }
+
+  showDeleteModal() {
+    this.hideContextMenu();
+    this.setState({ showDeleteModal: true })
+  }
+
+  hideDeleteModal() {
+    this.setState({ showDeleteModal: false })
+  }
+
+  showSaveConfigurationModal() {
+    this.hideContextMenu();
+    this.setState({ showSaveConfigurationModal: true })
+  }
+
+  hideSaveConfigurationModal() {
+    this.setState({ showSaveConfigurationModal: false })
+  }
+
+  showConfigurationManagementModal() {
+    this.hideContextMenu();
+    this.setState({ showConfigurationManagementModal: true })
+  }
+
+  hideConfigurationManagementModal() {
+    this.setState({ showConfigurationManagementModal: false })
+  }
+
+  showScopeManagementModal() {
+    this.hideContextMenu();
+    this.setState({ showScopeManagementModal: true })
+  }
+
+  hideScopeManagementModal() {
+    this.setState({ showScopeManagementModal: false })
+  }
+
+
+
+  saveProperties() {
+    let me = this;
+    let pl: ProductLine = me.props.projectService.getProductLineSelected();
+
+    // Capturar valores anteriores para sincronización colaborativa
+    const oldValues = {
+      name: pl.name,
+      domain: pl.domain,
+      type: pl.type
+    };
+
+    const newValues = {
+      name: me.state.plName,
+      domain: me.state.plDomain,
+      type: me.state.plType
+    };
+
+    // Aplicar cambios
+    pl.name = newValues.name;
+    pl.domain = newValues.domain;
+    pl.type = newValues.type;
+
+    const changedFields = Object.keys(newValues).filter(
+      (key) => oldValues[key] !== newValues[key]
+    );
+
+    if (changedFields.length > 0) {
+      this.registerHistoryEvent({
+        modelId: undefined,
+        actionType: HistoryActionType.ITEM_UPDATED,
+        entityType: HistoryEntityType.PRODUCT_LINE,
+        entityId: pl.id,
+        entityName: newValues.name,
+        oldValue: oldValues,
+        newValue: newValues,
+        description: `Updated product line "${newValues.name}": ${changedFields.join(", ")}`
+      });
+    }
+
+    // Sincronizar la operación de edición si es colaborativo
+    if (treeCollaborationService.isCollaborationActive()) {
+      const itemData = {
+        id: pl.id,
+        itemType: 'productLine',
+        oldValues: oldValues,
+        newValues: newValues,
+        productLineId: this.props.projectService.getIdCurrentProductLine()
+      };
+
+      treeCollaborationService.syncEditItemOperation(itemData);
+    }
+
+    // Guardar proyecto
+    this.props.projectService.saveProject();
+
+    me.hidePropertiesModal();
+    me.forceUpdate();
+  }
+
+  callExternalFuntion(efunction: ExternalFuntion, query: any = null): void {
+    this.props.projectService.callExternalFuntion(efunction, query, null, null);
   }
 
   onEnterModal(event: any) {
     if (event.key === "Enter") this.addNewFolder(event);
   }
 
+  findModelWithParentById(modelId: string) {
+    const project = this.props.projectService.project;
+
+    for (const productLine of project.productLines) {
+      const scopeModel = productLine.scope?.models?.find((m: any) => m.id === modelId);
+      if (scopeModel) {
+        return {
+          item: scopeModel,
+          parentProductLineId: productLine.id,
+          parentSection: "scope"
+        };
+      }
+
+      const domainModel = productLine.domainEngineering?.models?.find((m: any) => m.id === modelId);
+      if (domainModel) {
+        return {
+          item: domainModel,
+          parentProductLineId: productLine.id,
+          parentSection: "domainEngineering"
+        };
+      }
+
+      const appEngModel = productLine.applicationEngineering?.models?.find((m: any) => m.id === modelId);
+      if (appEngModel) {
+        return {
+          item: appEngModel,
+          parentProductLineId: productLine.id,
+          parentSection: "applicationEngineering"
+        };
+      }
+
+      for (const application of productLine.applicationEngineering?.applications || []) {
+        const appModel = application.models?.find((m: any) => m.id === modelId);
+        if (appModel) {
+          return {
+            item: appModel,
+            parentProductLineId: productLine.id,
+            parentSection: "application",
+            parentApplicationId: application.id
+          };
+        }
+
+        for (const adaptation of application.adaptations || []) {
+          const adaptationModel = adaptation.models?.find((m: any) => m.id === modelId);
+          if (adaptationModel) {
+            return {
+              item: adaptationModel,
+              parentProductLineId: productLine.id,
+              parentSection: "adaptation",
+              parentApplicationId: application.id,
+              parentAdaptationId: adaptation.id
+            };
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  findApplicationWithParentById(applicationId: string) {
+    const project = this.props.projectService.project;
+
+    for (const productLine of project.productLines) {
+      const application = productLine.applicationEngineering?.applications?.find(
+        (app: any) => app.id === applicationId
+      );
+
+      if (application) {
+        return {
+          item: application,
+          parentProductLineId: productLine.id
+        };
+      }
+    }
+
+    return null;
+  }
+
+  findAdaptationWithParentById(adaptationId: string) {
+    const project = this.props.projectService.project;
+
+    for (const productLine of project.productLines) {
+      for (const application of productLine.applicationEngineering?.applications || []) {
+        const adaptation = application.adaptations?.find(
+          (adaptation: any) => adaptation.id === adaptationId
+        );
+
+        if (adaptation) {
+          return {
+            item: adaptation,
+            parentProductLineId: productLine.id,
+            parentApplicationId: application.id
+          };
+        }
+      }
+    }
+
+    return null;
+  }
+
   deleteItemProject() {
+    const itemName = this.props.projectService.getItemProjectName();
+    const itemType = this.props.projectService.getTreeItemSelected();
+    const itemId = this.props.projectService.getTreeIdItemSelected();
+
+    let oldValue: any = null;
+    let historyEntityType: any = itemType;
+    let actionType: any = HistoryActionType.ITEM_DELETED;
+
+    if (itemType === "model") {
+      const data = this.findModelWithParentById(itemId);
+
+      if (data) {
+        oldValue = {
+          ...data.item,
+          parentProductLineId: data.parentProductLineId,
+          parentSection: data.parentSection,
+          parentApplicationId: data.parentApplicationId,
+          parentAdaptationId: data.parentAdaptationId
+        };
+      }
+
+      historyEntityType = HistoryEntityType.MODEL;
+      actionType = HistoryActionType.MODEL_DELETED;
+    }
+
+    if (itemType === "application") {
+      const data = this.findApplicationWithParentById(itemId);
+
+      if (data) {
+        oldValue = {
+          ...data.item,
+          parentProductLineId: data.parentProductLineId
+        };
+      }
+
+      historyEntityType = HistoryEntityType.APPLICATION;
+    }
+
+    if (itemType === "adaptation") {
+      const data = this.findAdaptationWithParentById(itemId);
+
+      if (data) {
+        oldValue = {
+          ...data.item,
+          parentProductLineId: data.parentProductLineId,
+          parentApplicationId: data.parentApplicationId
+        };
+      }
+
+      historyEntityType = HistoryEntityType.ADAPTATION;
+    }
+
+    if (itemType === "productLine") {
+      const productLine = this.props.projectService.project.productLines.find(
+        (pl: any) => pl.id === itemId
+      );
+
+      if (productLine) {
+        oldValue = JSON.parse(JSON.stringify(productLine));
+      }
+
+      historyEntityType = HistoryEntityType.PRODUCT_LINE;
+    }
+
+    // Obtener información del modelo ANTES de eliminarlo (para sincronización)
+    let modelDataForSync = null;
+    if (itemType === 'model' && treeCollaborationService.isCollaborationActive()) {
+      const project = this.props.projectService.project;
+      const model = this.props.projectService.findModelById(project, itemId);
+
+      if (model) {
+        modelDataForSync = {
+          id: model.id,
+          name: model.name,
+          type: this.getModelTypeFromContext(),
+          languageName: model.type,
+          languageId: model.languageId,
+          productLineId: this.props.projectService.getIdCurrentProductLine()
+        };
+      }
+    }
+
+    // PASO 1: Eliminar localmente PRIMERO
+    this.hideDeleteModal();
     this.props.projectService.deleteItemProject();
+
+    this.registerHistoryEvent({
+      modelId: itemType === "model" ? itemId : undefined,
+      actionType: actionType,
+      entityType: historyEntityType,
+      entityId: itemId,
+      entityName: itemName,
+      oldValue: oldValue,
+      newValue: null,
+      description: `Deleted ${itemType} "${itemName}"`
+    });
+
+    // PASO 2: Sincronizar operación colaborativa DESPUÉS de eliminar localmente
+    if (modelDataForSync && treeCollaborationService.isCollaborationActive()) {
+      treeCollaborationService.syncDeleteModelOperation(modelDataForSync, this.props.projectService);
+    }
+  }
+
+  /**
+   * Determina el tipo de modelo basado en el contexto del tree
+   */
+  getModelTypeFromContext(): string {
+    const treeItemSelected = this.props.projectService.getTreeItemSelected();
+    const modelId = this.props.projectService.getTreeIdItemSelected();
+    const project = this.props.projectService.project;
+
+    // Buscar el modelo en las diferentes secciones del proyecto para determinar su tipo
+    for (const productLine of project.productLines) {
+      // Verificar en scope
+      if (productLine.scope?.models?.some(model => model.id === modelId)) {
+        return 'scope';
+      }
+
+      // Verificar en domain engineering
+      if (productLine.domainEngineering?.models?.some(model => model.id === modelId)) {
+        return 'domainEngineering';
+      }
+
+      // Verificar en application engineering
+      if (productLine.applicationEngineering?.models?.some(model => model.id === modelId)) {
+        return 'applicationEngineering';
+      }
+
+      // Verificar en applications
+      for (const application of productLine.applicationEngineering?.applications || []) {
+        if (application.models?.some(model => model.id === modelId)) {
+          return 'application';
+        }
+
+        // Verificar en adaptations
+        for (const adaptation of application.adaptations || []) {
+          if (adaptation.models?.some(model => model.id === modelId)) {
+            return 'adaptation';
+          }
+        }
+      }
+    }
+
+    // Fallback: usar el contexto del tree si no se encuentra el modelo
+    if (treeItemSelected === 'scope') return 'scope';
+    if (treeItemSelected === 'domainEngineering') return 'domainEngineering';
+    if (treeItemSelected === 'applicationEngineering') return 'applicationEngineering';
+    if (treeItemSelected === 'application') return 'application';
+    if (treeItemSelected === 'adaptation') return 'adaptation';
+
+    return 'unknown';
+  }
+
+  saveConfiguration() {
+    this.hideContextMenu();
+    this.hideSaveConfigurationModal();
+
+    let successCallback = (e: any) => {
+      alert("Configuration saved.");
+    }
+
+    let errorCallback = (e: any) => {
+      alert("Configuration not saved.");
+    }
+    let configurationInformation = new ConfigurationInformation("1", this.state.configurationName, null, null);
+    this.props.projectService.saveConfigurationInServer(configurationInformation, successCallback, errorCallback);
   }
 
   renameItemProject(newName: string) {
+    const oldName = this.props.projectService.getItemProjectName();
+    const itemType = this.props.projectService.getTreeItemSelected();
+    const itemId = this.props.projectService.getTreeIdItemSelected();
+
+    let historyEntityType: any = itemType;
+    let actionType: any = HistoryActionType.ITEM_UPDATED;
+
+    if (itemType === "model") {
+      historyEntityType = HistoryEntityType.MODEL;
+      actionType = HistoryActionType.MODEL_UPDATED;
+    }
+
+    if (itemType === "productLine") {
+      historyEntityType = HistoryEntityType.PRODUCT_LINE;
+    }
+
+    if (itemType === "application") {
+      historyEntityType = HistoryEntityType.APPLICATION;
+    }
+
+    if (itemType === "adaptation") {
+      historyEntityType = HistoryEntityType.ADAPTATION;
+    }
+
+    // Sincronizar la operación de edición si es colaborativo
+    if (treeCollaborationService.isCollaborationActive()) {
+
+      if (itemType === 'model') {
+        // Sincronización para modelos
+        const project = this.props.projectService.project;
+        const model = this.props.projectService.findModelById(project, itemId);
+
+        if (model) {
+          const itemData = {
+            id: model.id,
+            oldName: oldName,
+            newName: newName,
+            type: this.getModelTypeFromContext(),
+            languageName: model.type,
+            languageId: model.languageId,
+            productLineId: this.props.projectService.getIdCurrentProductLine(),
+            itemType: itemType
+          };
+
+          treeCollaborationService.syncEditItemOperation(itemData);
+        }
+
+      } else if (itemType === 'productLine') {
+        // Sincronización para ProductLines
+        const project = this.props.projectService.project;
+        const productLine = project.productLines.find((pl: any) => pl.id === itemId);
+
+        if (productLine) {
+          const itemData = {
+            id: productLine.id,
+            itemType: 'productLine',
+            oldValues: {
+              name: oldName,
+              domain: productLine.domain,
+              type: productLine.type
+            },
+            newValues: {
+              name: newName,
+              domain: productLine.domain,
+              type: productLine.type
+            },
+            productLineId: productLine.id
+          };
+
+          treeCollaborationService.syncEditItemOperation(itemData);
+        }
+      }
+    }
+
     this.props.projectService.renameItemProject(newName);
+
+    this.registerHistoryEvent({
+      modelId: itemType === "model" ? itemId : undefined,
+      actionType: actionType,
+      entityType: historyEntityType,
+      entityId: itemId,
+      entityName: newName,
+      oldValue: { name: oldName },
+      newValue: { name: newName },
+      description: `Renamed ${itemType} "${oldName}" to "${newName}"`
+    });
+  }
+
+  getItemProjectName() {
+    return this.props.projectService.getItemProjectName();
+  }
+
+  showContextMenu() {
+    this.setState({
+      showContextMenu: true
+    })
+  }
+
+  hideContextMenu() {
+    this.setState({
+      showContextMenu: false
+    })
+    if (this.props.onContextMenuHide) {
+      this.props.onContextMenuHide({ target: this });
+    }
   }
 
   viewMenuTree_addListener() {
@@ -89,6 +745,36 @@ class TreeMenu extends Component<Props, State> {
           optionAllowDelete: true,
         });
       },
+      scopeSPLOLD: () => {
+        const selectedItem = this.props.projectService.getSelectedScope();
+        this.setState({ optionScopeEnable: true });
+        if (!selectedItem) {
+          console.warn("No valid scope selected");
+          return;
+        }
+
+        if (this.state.selectedScopeId !== selectedItem.id) {
+          console.log("Selected Scope Item:", selectedItem);
+          this.setState({
+            selectedScopeId: selectedItem.id,
+            optionScopeEnable: true,
+            newSelected: "SCOPE",
+          });
+        }
+      },
+      scope: () => {
+        console.log()
+        if (this.props.projectService.project.productLines[this.props.projectService.getIdCurrentProductLine()].scope.models.length > 0) {
+          me.setState({
+            optionAllowAnalyzeScope: true,
+          });
+        }
+        me.setState({
+          optionAllowModelEnable: true,
+          optionAllowModelScope: true,
+          newSelected: "SCOPE",
+        });
+      },
       domainEngineering: () => {
         me.setState({
           optionAllowModelEnable: true,
@@ -98,7 +784,7 @@ class TreeMenu extends Component<Props, State> {
       },
       applicationEngineering: () => {
         me.setState({
-          optionAllowModelEnable: true,
+          optionAllowModelEnable: false,
           optionAllowModelApplication: true,
           optionAllowApplication: true,
           newSelected: "APPLICATION",
@@ -108,7 +794,7 @@ class TreeMenu extends Component<Props, State> {
         me.setState({
           optionAllowModelEnable: true,
           optionAllowModelApplication: true,
-          optionAllowApplication: true,
+          optionAllowApplication: false,
           optionAllowAdaptation: true,
           optionAllowRename: true,
           optionAllowDelete: true,
@@ -126,6 +812,8 @@ class TreeMenu extends Component<Props, State> {
       },
       model: function () {
         me.setState({
+          optionAllowProperties: true,
+          optionAllowRename: true,
           optionAllowDelete: true,
           optionAllowEFunctions: true,
         });
@@ -141,19 +829,30 @@ class TreeMenu extends Component<Props, State> {
   removeHidden() {
     this.setState({
       optionAllowModelEnable: false,
+      optionScopeEnable: false,
+      optionAllowModelScope: false,
       optionAllowModelDomain: false,
       optionAllowModelApplication: false,
       optionAllowModelAdaptation: false,
       optionAllowProductLine: false,
       optionAllowApplication: false,
       optionAllowAdaptation: false,
+      optionAllowProperties: false,
       optionAllowRename: false,
       optionAllowDelete: false,
       optionAllowEFunctions: false,
+      optionAllowAnalyzeScope: false,
     });
   }
 
   componentDidMount() {
+    (window as any).projectService = this.props.projectService;
+
+    // 2) Notificar al resto de componentes que el service está listo
+    window.dispatchEvent(new CustomEvent("projectservice:ready"));
+
+    // 3) Forzar la carga de lenguajes (dispara listeners)
+    try { this.props.projectService.refreshLanguageList?.(); } catch { }
     let me = this;
     me.props.projectService.addLanguagesDetailListener(
       this.projectService_addListener
@@ -164,22 +863,58 @@ class TreeMenu extends Component<Props, State> {
     me.props.projectService.addUpdateProjectListener(
       this.projectService_addListener
     );
+    me.props.projectService.addRequestSaveConfigurationListener(
+      this.projectService_requestSaveConfigurationListener.bind(this)
+    );
+    me.props.projectService.addRequestOpenConfigurationListener(
+      this.projectService_requestOpenConfigurationListener.bind(this)
+    );
+
+    this.setState({
+      plDomains: this.props.projectService.getProductLineDomainsList(),
+      plTypes: this.props.projectService.getProductLineTypesList()
+    })
+  }
+
+  componentDidUpdate(prevProps: Readonly<Props>, prevState: Readonly<State>, snapshot?: any): void {
+    let me = this;
+    if (prevProps.showContextMenu != this.props.showContextMenu) {
+      if (!this.props.showContextMenu) {
+        me.setState({
+          showContextMenu: this.props.showContextMenu
+        })
+        return;
+      }
+    }
+    if (prevProps.contextMenuX != this.props.contextMenuX || prevProps.contextMenuY != this.props.contextMenuY) {
+      me.viewMenuTree_addListener();
+      me.setState({
+        showContextMenu: this.props.showContextMenu
+      })
+    }
   }
 
   handleUpdateEditorText(event: any) {
     this.setState({
-      modalInputValue: event.target.value,
+      modalInputValue: event.target.value
     });
   }
 
   handleUpdateNewSelected(event: any) {
-    this.updateModal(event.target.id);
+    this.hideContextMenu();
+    this.updateModal(event.target.id, event.target.value);
   }
 
-  updateModal(eventId: string) {
-    document.getElementById("modalInputValue").focus();
+  inputConfigurationName_onChange(event: any) {
+    this.setState({
+      configurationName: event.target.value,
+    });
+  }
+
+  updateModal(eventId: string, value: string) {
 
     let me = this;
+    me.state.modalInputValue = value;
     const updateModal: any = {
       PRODUCTLINE: function () {
         me.state.modalTittle = "New product line";
@@ -193,9 +928,14 @@ class TreeMenu extends Component<Props, State> {
         me.state.modalTittle = "New Adaptation";
         me.state.modalInputText = "Enter new adaptation name";
       },
+      MODEL: function () {
+        me.state.modalTittle = "New model";
+        me.state.modalInputText = "Enter new model name";
+      },
       renameItem: function () {
         me.state.modalTittle = "Rename";
         me.state.modalInputText = "Enter new name";
+        me.state.modalInputValue = me.getItemProjectName();
       },
       default: function () {
         me.state.modalTittle = "New ";
@@ -209,11 +949,175 @@ class TreeMenu extends Component<Props, State> {
       modalInputText: me.state.modalInputText,
       newSelected: eventId,
     });
+
+    this.hideContextMenu();
+
+    if (me.state.modalInputText == "Enter new model name") {
+      let model = new Model("1", value, "none", "0", null, null, null, null);
+      this.showModelInformationEditorModal(model);
+    } else {
+      this.showEditorTextModal();
+    }
   }
 
   projectService_addListener(e: any) {
     this.forceUpdate();
     this.props.projectService.saveProject();
+  }
+
+  projectService_requestSaveConfigurationListener(e: any) {
+    let me = this;
+    this.showSaveConfigurationModal();
+  }
+
+  projectService_requestOpenConfigurationListener(e: any) {
+    let me = this;
+    this.showConfigurationManagementModal();
+  }
+
+  projectService_requestOpenScopeManagementListener(e: any) {
+    let me = this;
+    this.showScopeManagementModal();
+  }
+
+  updateQuery(event: React.ChangeEvent<HTMLTextAreaElement>) {
+    this.setState({
+      query: event.target.value
+    })
+  }
+
+  setSelectedFunction(idx) {
+    this.setState({
+      selectedFunction: idx
+    })
+  }
+
+  runQuery(_event: any) {
+    this.hideQueryModal();
+    const query_json = JSON.parse(this.state.query);
+    this.callExternalFuntion(this.props.projectService.externalFunctions[this.state.selectedFunction], query_json)
+  }
+
+  saveNewModelInformation() {
+    const projectInfo = this.props.projectService.getProjectInformation();
+
+    if (!projectInfo) {
+      console.error("[Project] projectInfo is null");
+      return;
+    }
+
+    projectInfo.project = this.props.projectService.project;
+
+    this.props.projectService.saveProjectInServer(
+      projectInfo,
+      () => { },
+      (error) => console.error("[Project] Error saving project:", error)
+    );
+  }
+
+  modelInformationEditorModal_onAccept = (e) => {
+    let me = this;
+    if (this.state.model.name === "") {
+      alertify.error("The name is required");
+      return;
+    }
+
+    if ([null, '0'].includes(this.state.model.languageId)) {
+      // Es un modelo nuevo, usar la lógica existente de agregar
+      me.addNewModel(this.state.model.name, this.state.model.description, this.state.model.author, this.state.model.source);
+    } else {
+      // Es un modelo existente, sincronizar cambios colaborativamente
+      const project = this.props.projectService.project;
+      const existingModel = this.props.projectService.findModelById(project, this.state.model.id);
+
+      if (existingModel && treeCollaborationService.isCollaborationActive()) {
+        // Capturar valores anteriores y nuevos
+        const oldValues = {
+          name: existingModel.name,
+          description: existingModel.description,
+          author: existingModel.author,
+          source: existingModel.source
+        };
+
+        const newValues = {
+          name: this.state.model.name,
+          description: this.state.model.description,
+          author: this.state.model.author,
+          source: this.state.model.source
+        };
+
+        // Verificar si el nombre cambió para usar el método correcto
+        const nameChanged = oldValues.name !== newValues.name;
+
+        if (nameChanged) {
+          // Si el nombre cambió, usar el método renameItemProject para actualizar correctamente la UI local
+          const previousSelectedId = this.props.projectService.getTreeIdItemSelected();
+          const previousSelectedType = this.props.projectService.getTreeItemSelected();
+
+          // Temporalmente seleccionar el modelo para renombrarlo
+          this.props.projectService.setTreeItemSelected("model");
+          (this.props.projectService as any).treeIdItemSelected = existingModel.id;
+
+          // Renombrar usando el método que actualiza la UI correctamente
+          this.props.projectService.renameItemProject(newValues.name);
+
+          // Restaurar la selección anterior
+          this.props.projectService.setTreeItemSelected(previousSelectedType);
+          (this.props.projectService as any).treeIdItemSelected = previousSelectedId;
+        }
+
+        // Aplicar cambios a las otras propiedades (no nombre)
+        existingModel.description = newValues.description;
+        existingModel.author = newValues.author;
+        existingModel.source = newValues.source;
+
+        const changedFields = Object.keys(newValues).filter(
+          (key) => oldValues[key] !== newValues[key]
+        );
+
+        if (changedFields.length > 0) {
+          this.registerHistoryEvent({
+            modelId: existingModel.id,
+            actionType: HistoryActionType.MODEL_UPDATED,
+            entityType: HistoryEntityType.MODEL,
+            entityId: existingModel.id,
+            entityName: newValues.name,
+            oldValue: oldValues,
+            newValue: newValues,
+            description: `Updated model "${newValues.name}": ${changedFields.join(", ")}`
+          });
+        }
+
+        // Solo sincronizar las propiedades que no sean el nombre (el nombre ya se sincronizó con renameItemProject)
+        if (!nameChanged || oldValues.description !== newValues.description ||
+          oldValues.author !== newValues.author || oldValues.source !== newValues.source) {
+
+          const itemData = {
+            id: existingModel.id,
+            itemType: 'model',
+            oldValues: oldValues,
+            newValues: newValues,
+            nameAlreadySynced: nameChanged, // Indicar que el nombre ya fue sincronizado
+            type: this.getModelTypeFromContext(),
+            languageName: existingModel.type,
+            languageId: existingModel.languageId,
+            productLineId: this.props.projectService.getIdCurrentProductLine()
+          };
+
+          treeCollaborationService.syncEditItemOperation(itemData);
+        }
+
+      } else if (existingModel) {
+        // Aplicar cambios localmente sin sincronización
+        existingModel.name = this.state.model.name;
+        existingModel.description = this.state.model.description;
+        existingModel.author = this.state.model.author;
+        existingModel.source = this.state.model.source;
+      }
+
+      this.saveNewModelInformation();
+    }
+    me.hideModelInformationEditorModal();
   }
 
   addNewFolder(event: any) {
@@ -226,13 +1130,16 @@ class TreeMenu extends Component<Props, State> {
     let me = this;
     const add: any = {
       PRODUCTLINE: function () {
-        me.addNewProductLine(me.state.modalInputValue);
+        me.addNewProductLine(me.state.modalInputValue, 'System', 'Retail');
       },
       APPLICATION: function () {
         me.addNewApplication(me.state.modalInputValue);
       },
       ADAPTATION: function () {
         me.addNewAdaptation(me.state.modalInputValue);
+      },
+      MODEL: function () {
+        me.addNewModel(me.state.modalInputValue, null, null, null);
       },
       renameItem: function () {
         me.renameItemProject(me.state.modalInputValue);
@@ -241,18 +1148,31 @@ class TreeMenu extends Component<Props, State> {
 
     add[this.state.newSelected]();
 
-    document.getElementById("closeModal")?.click();
-
     this.setState({
       modalInputValue: "",
     });
+
+    this.hideEditorTextModal();
   }
 
-  addNewProductLine(productLineName: string) {
+  addNewProductLine(productLineName: string, type: string, domain: string) {
     let productLine = this.props.projectService.createLPS(
       this.props.projectService.project,
-      productLineName
+      productLineName,
+      type,
+      domain
     );
+
+    this.registerHistoryEvent({
+      modelId: undefined,
+      actionType: HistoryActionType.ITEM_CREATED,
+      entityType: HistoryEntityType.PRODUCT_LINE,
+      entityId: productLine.id,
+      entityName: productLine.name,
+      newValue: productLine,
+      description: `Created product line "${productLine.name}"`
+    });
+
     this.props.projectService.raiseEventNewProductLine(productLine);
     this.props.projectService.saveProject();
   }
@@ -262,203 +1182,663 @@ class TreeMenu extends Component<Props, State> {
       this.props.projectService.project,
       applicationName
     );
+
+    this.registerHistoryEvent({
+      modelId: undefined,
+      actionType: HistoryActionType.ITEM_CREATED,
+      entityType: HistoryEntityType.APPLICATION,
+      entityId: application.id,
+      entityName: application.name,
+      newValue: application,
+      description: `Created application "${application.name}"`
+    });
+
     this.props.projectService.raiseEventApplication(application);
     this.props.projectService.saveProject();
   }
 
   addNewAdaptation(adaptationName: string) {
+
     let adaptation = this.props.projectService.createAdaptation(
       this.props.projectService.project,
       adaptationName
     );
+
+    this.registerHistoryEvent({
+      modelId: undefined,
+      actionType: HistoryActionType.ITEM_CREATED,
+      entityType: HistoryEntityType.ADAPTATION,
+      entityId: adaptation.id,
+      entityName: adaptation.name,
+      newValue: adaptation,
+      description: `Created adaptation "${adaptation.name}"`
+    });
+
     this.props.projectService.raiseEventAdaptation(adaptation);
     this.props.projectService.saveProject();
   }
 
   addNewEModel(language: Language) {
     let me = this;
+    me.hideContextMenu();
+    me.state.newModelLanguage = language;
+    let e = { target: { id: "MODEL", value: language.name } }
+    this.handleUpdateNewSelected(e);
 
+    // const add: any = {
+    //   DOMAIN: function () {
+    //     me.addNewDomainEModel(language.name, name );
+    //   },
+    //   APPLICATION: function () {
+    //     if (me.props.projectService.getTreeItemSelected() === "applicationEngineering") {
+    //       me.addNewApplicationEModel(language.name, name );
+    //     }
+    //     else {
+    //       me.addNewApplicationModel(language.name, name );
+    //     } 
+    //   },
+    //   ADAPTATION: function () {
+    //     me.addNewAdaptationModel(language.name, name );
+    //   },
+    // };
+
+    // add[language.type]();
+  }
+
+  addNewModel(name: string, description: string, author: string, source: string) {
+    let me = this;
+    let language: Language = me.state.newModelLanguage;
     const add: any = {
+      SCOPE: function () {
+        me.addNewScopeModel(language.name, "" + language.id, name, description, author, source);
+      },
       DOMAIN: function () {
-        if (!me.props.projectService.existDomainModel(language.name))
-          me.addNewDomainEModel(language.name);
-        else alertify.error(language.name + " model already exist.");
+        me.addNewDomainEModel(language.name, "" + language.id, name, description, author, source);
       },
       APPLICATION: function () {
-        if (
-          me.props.projectService.getTreeItemSelected() ===
-          "applicationEngineering"
-        ) {
-          if (!me.props.projectService.existApplicaioninEngModel(language.name))
-            me.addNewApplicationEModel(language.name);
-          else alertify.error(language.name + " model already exist.");
-        } else if (
-          !me.props.projectService.existApplicaioninModel(language.name)
-        )
-          me.addNewApplicationModel(language.name);
-        else alertify.error(language.name + " model already exist.");
+        if (me.props.projectService.getTreeItemSelected() === "applicationEngineering") {
+          me.addNewApplicationEModel(language.name, "" + language.id, name, description, author, source);
+        }
+        else {
+          me.addNewApplicationModel(language.name, "" + language.id, name, description, author, source);
+        }
       },
       ADAPTATION: function () {
-        if (!me.props.projectService.existAdaptationModel(language.name))
-          me.addNewAdaptationModel(language.name);
-        else alertify.error(language.name + " model already exist.");
+        me.addNewAdaptationModel(language.name, "" + language.id, name, description, author, source);
       },
     };
 
     add[language.type]();
   }
 
-  addNewDomainEModel(languageName: string) {
+
+  addNewScopeModel(languageName: string, languageId: string, name: string, description: string, author: string, source: string) {
+    let model =
+      this.props.projectService.createScopeModel(
+        this.props.projectService.project,
+        languageName,
+        languageId,
+        name,
+        description,
+        author,
+        source
+      );
+
+    this.props.projectService.raiseEventScopeModel(
+      model
+    );
+    this.props.projectService.saveProject();
+
+    // Sincronizar operación colaborativa
+    if (treeCollaborationService.isCollaborationActive()) {
+
+      const modelData = {
+        id: model.id,
+        name: model.name,
+        type: 'scope',
+        languageName: languageName,
+        languageId: languageId,
+        description: description,
+        author: author,
+        source: source,
+        productLineId: this.props.projectService.getIdCurrentProductLine()
+      };
+
+      treeCollaborationService.syncAddModelOperation(modelData, this.props.projectService);
+    }
+  }
+
+  registerHistoryEvent(event: any) {
+    const projectInfo = this.props.projectService.getProjectInformation();
+
+    const projectId =
+      projectInfo?.id ||
+      projectInfo?.project?.id ||
+      this.props.projectService.getProject()?.id;
+
+    const historyEvent = new ProjectHistory(
+      undefined,
+      projectId,
+      event.modelId,
+      undefined,
+      event.actionType,
+      event.entityType,
+      event.entityId,
+      event.entityName,
+      event.oldValue,
+      event.newValue,
+      event.description,
+      new Date()
+    );
+
+    this.props.projectService.createHistoryEvent(historyEvent)
+      .then((res) => {
+        historyCollaborationService.publishHistoryEvent({
+          ...historyEvent,
+          id: res.data?.id,
+          createdAt: new Date().toISOString()
+        });
+      })
+      .catch((err) => console.error("[History] tree error", err));
+  }
+
+  addNewDomainEModel(languageName: string, languageId: string, name: string, description: string, author: string, source: string) {
     let domainEngineeringModel =
       this.props.projectService.createDomainEngineeringModel(
         this.props.projectService.project,
-        languageName
+        languageName,
+        languageId,
+        name,
+        description,
+        author,
+        source
       );
 
     this.props.projectService.raiseEventDomainEngineeringModel(
       domainEngineeringModel
     );
     this.props.projectService.saveProject();
+
+    this.registerHistoryEvent({
+      modelId: domainEngineeringModel.id,
+      actionType: HistoryActionType.MODEL_CREATED,
+      entityType: HistoryEntityType.MODEL,
+      entityId: domainEngineeringModel.id,
+      entityName: domainEngineeringModel.name,
+      newValue: domainEngineeringModel,
+      description: `Created model "${domainEngineeringModel.name}"`
+    });
+
+    // Sincronizar operación colaborativa
+    if (treeCollaborationService.isCollaborationActive()) {
+      const modelData = {
+        id: domainEngineeringModel.id,
+        name: domainEngineeringModel.name,
+        type: 'domainEngineering',
+        languageName: languageName,
+        languageId: languageId,
+        description: description,
+        author: author,
+        source: source,
+        productLineId: this.props.projectService.getIdCurrentProductLine()
+      };
+
+      treeCollaborationService.syncAddModelOperation(modelData, this.props.projectService);
+    }
   }
 
-  addNewApplicationEModel(languageName: string) {
+  addNewApplicationEModel(languageName: string, languageId: string, name: string, description: string, author: string, source: string) {
     let applicationEngineeringModel =
       this.props.projectService.createApplicationEngineeringModel(
         this.props.projectService.project,
-        languageName
+        languageName,
+        languageId,
+        name,
+        description,
+        author,
+        source
       );
 
     this.props.projectService.raiseEventApplicationEngineeringModel(
       applicationEngineeringModel
     );
     this.props.projectService.saveProject();
+
+    this.registerHistoryEvent({
+      modelId: applicationEngineeringModel.id,
+      actionType: HistoryActionType.MODEL_CREATED,
+      entityType: HistoryEntityType.MODEL,
+      entityId: applicationEngineeringModel.id,
+      entityName: applicationEngineeringModel.name,
+      newValue: applicationEngineeringModel,
+      description: `Created model "${applicationEngineeringModel.name}"`
+    });
   }
 
-  addNewApplicationModel(languageName: string) {
+  addNewApplicationModel(languageName: string, languageId: string, name: string, description: string, author: string, source: string) {
     let applicationModel = this.props.projectService.createApplicationModel(
       this.props.projectService.project,
-      languageName
+      languageName,
+      languageId,
+      name,
+      description,
+      author,
+      source
     );
     this.props.projectService.raiseEventApplicationModelModel(applicationModel);
     this.props.projectService.saveProject();
+
+    this.registerHistoryEvent({
+      modelId: applicationModel.id,
+      actionType: HistoryActionType.MODEL_CREATED,
+      entityType: HistoryEntityType.MODEL,
+      entityId: applicationModel.id,
+      entityName: applicationModel.name,
+      newValue: applicationModel,
+      description: `Created model "${applicationModel.name}"`
+    });
   }
 
-  addNewAdaptationModel(languageName: string) {
+  addNewAdaptationModel(languageName: string, languageId: string, name: string, description: string, author: string, source: string) {
     let adaptationModel = this.props.projectService.createAdaptationModel(
       this.props.projectService.project,
-      languageName
+      languageName,
+      languageId,
+      name,
+      description,
+      author,
+      source
     );
     this.props.projectService.raiseEventAdaptationModelModel(adaptationModel);
     this.props.projectService.saveProject();
+
+    this.registerHistoryEvent({
+      modelId: adaptationModel.id,
+      actionType: HistoryActionType.MODEL_CREATED,
+      entityType: HistoryEntityType.MODEL,
+      entityId: adaptationModel.id,
+      entityName: adaptationModel.name,
+      newValue: adaptationModel,
+      description: `Created model "${adaptationModel.name}"`
+    });
+  }
+
+  configurationManagement_onConfigurationSelected(e) {
+    this.hideConfigurationManagementModal();
+  }
+
+  scopeManagement_onScopeSelected(e) {
+    this.hideScopeManagementModal();
+  }
+
+  handleScopeManagement() {
+    const productLines = this.props.projectService.project.productLines;
+    const selectedProductLineId = this.props.projectService.getTreeIdItemSelected();
+
+    // Encuentra el Scope asociado al product line seleccionado
+    const selectedScopeModel = productLines
+      .find((pl) => pl.id === selectedProductLineId)
+      ?.scope?.models[0]; // Cambiar el índice si necesitas un modelo específico
+
+    if (!selectedScopeModel) {
+      console.error("No scope model found for the selected product line.");
+      return;
+    }
+
+    // Actualiza el Tree ID seleccionado y lanza el evento
+    this.props.projectService.updateScopeSelectedOri(selectedScopeModel.id);
+
+    // Llama a la lógica necesaria para manejar la configuración
+    this.props.projectService.getAllConfigurations(
+      (configurations) => {
+        console.log("Configurations loaded:", configurations);
+        // Aquí puedes abrir un modal o realizar cualquier acción con las configuraciones cargadas.
+      },
+      (error) => {
+        console.error("Error loading configurations:", error);
+      }
+    );
+  }
+  handleAnalyzeScope = () => {
+    // cierra el menú
+    this.hideContextMenu();
+    // abre el modal
+    this.setState({ showScopeModal: true });
+  }
+
+  handleCloseAnalyzerScope = () => {
+    this.setState({ showScopeModal: false });
+  }
+
+
+  renderContexMenu() {
+    let items = [];
+
+    if (this.state.optionAllowProductLine) {
+      items.push(<Dropdown.Item href="#" onClick={this.handleUpdateNewSelected} id="PRODUCTLINE">New product line</Dropdown.Item>);
+      items.push(<Dropdown.Item href="#" onClick={this.showPropertiesModal}>Properties</Dropdown.Item>);
+    }
+    if (this.state.optionScopeEnable) {
+      console.log("Rendering Scope management button");
+      items.push(
+        <Dropdown.Item
+          href="#"
+          onClick={this.showScopeManagementModal.bind(this)}
+          id="SCOPE"
+        >
+          Scope management
+        </Dropdown.Item>
+      );
+    }
+
+    if (this.state.optionAllowApplication) {
+      items.push(<Dropdown.Item href="#" onClick={this.handleUpdateNewSelected} id="APPLICATION">New application</Dropdown.Item>);
+    }
+    if (this.state.optionAllowAdaptation) {
+      items.push(<Dropdown.Item href="#" onClick={this.handleUpdateNewSelected} id="ADAPTATION">New adaptation</Dropdown.Item>);
+    }
+    if (this.state.optionAllowProperties) {
+      items.push(<Dropdown.Item href="#" onClick={this.showModelPropertiesModal} id="propertiesItem">Properties</Dropdown.Item>);
+    }
+    if (this.state.optionAllowRename) {
+      items.push(<Dropdown.Item href="#" onClick={this.handleUpdateNewSelected} id="renameItem">Rename</Dropdown.Item>);
+    }
+    if (this.state.optionAllowDelete) {
+      items.push(<Dropdown.Item href="#" onClick={this.showDeleteModal} id="deleteItem">Delete</Dropdown.Item>);
+    }
+    if (this.state.optionAllowModelEnable) {
+      let children = [];
+      for (let i = 0; i < this.props.projectService.languages.length; i++) {
+        const language: Language = this.props.projectService.languages[i];
+        if (language.type === this.state.newSelected) {
+          children.push(<Dropdown.Item href="#" onClick={() => this.addNewEModel(language)} id="newModel" key={i}>{language.name}</Dropdown.Item>)
+        }
+      }
+      items.push(<DropdownButton id="nested-dropdown" title="New model" key="end" drop="end" variant="Info">{children}</DropdownButton>);
+    }
+    if (this.state.optionAllowAnalyzeScope) {
+      items.push(
+        <Dropdown.Item
+          href="#"
+          onClick={() => this.handleAnalyzeScope()}
+          key="analyzeScope"
+        >
+          Technical metrics of scope
+        </Dropdown.Item>
+      );
+    }
+    if (this.state.optionAllowEFunctions) {
+      if (this.props.projectService.externalFunctions) {
+        if (this.props.projectService.externalFunctions.length >= 1) {
+          let children = [];
+          for (let i = 0; i < this.props.projectService.externalFunctions.length; i++) {
+            const efunction: ExternalFuntion = this.props.projectService.externalFunctions[i];
+            if (Object.getOwnPropertyNames(efunction.header).length > 0) {
+              children.push(<Dropdown.Item href="#" onClick={() => this.setSelectedFunction(i)} id="newModel" key={i}>{efunction.label}</Dropdown.Item>)
+            } else {
+              children.push(<Dropdown.Item href="#" onClick={() => this.callExternalFuntion(efunction)} id="newModel" key={i}>{efunction.label}</Dropdown.Item>)
+            }
+          }
+          items.push(<DropdownButton id="nested-dropdown" title="Tools" key="end" drop="end" variant="Info">{children}</DropdownButton>);
+        }
+      }
+      if (true) {
+        items.push(<Dropdown.Item href="#" onClick={this.showSaveConfigurationModal.bind(this)} id="saveConfiguration">Save configuration</Dropdown.Item>);
+        items.push(<Dropdown.Item href="#" onClick={this.showConfigurationManagementModal.bind(this)} id="manageConfigurations">Configuration management</Dropdown.Item>);
+      }
+    }
+
+
+    let left = this.props.contextMenuX + "px";
+    let top = this.props.contextMenuY + "px";
+
+    return (
+      <Dropdown.Menu show={this.state.showContextMenu} style={{ left: left, top: top }}>
+        {items}
+      </Dropdown.Menu>
+    );
   }
 
   render() {
     return (
-      <div className="treeMenu">
-        <div
-          className="modal fade"
-          id="editorTextModal"
-          tabIndex={-1}
-          aria-labelledby="editorTextModalLabel"
-          aria-hidden="true"
-        >
-          <div className="modal-dialog modalTreeMenu-left-variamos">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title" id="editorTextModalLabel">
-                  {this.state.modalTittle}
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  data-bs-dismiss="modal"
-                  aria-label="Close"
-                ></button>
-              </div>
-              <div className="modal-body">
-                <div className="form-floating">
+      <div className="treeMenu pb-2">
+        {this.renderContexMenu()}
+
+        <Modal id="modelInformationEditorModal" show={this.state.showModelInformationEditorModal} onHide={this.hideModelInformationEditorModal.bind(this)} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              Model properties
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <ModelInformationEditor model={this.state.model} />
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={this.hideModelInformationEditorModal.bind(this)} >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={this.modelInformationEditorModal_onAccept} >
+              Accept
+            </Button>
+          </Modal.Footer>
+        </Modal>
+
+        <Modal id="editorTextModal" show={this.state.showEditorTextModal} onHide={this.hideEditorTextModal} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              {this.state.modalTittle}
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="form-floating">
+              <input
+                type="text"
+                className="form-control"
+                id="modalInputValue"
+                placeholder="VariaMosTextEditor"
+                value={this.state.modalInputValue}
+                onChange={this.handleUpdateEditorText}
+                onKeyDown={this.onEnterModal}
+              />
+              <label htmlFor="floatingInput">
+                {this.state.modalInputText}
+              </label>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={this.hideEditorTextModal} >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={this.addNewFolder} >
+              Accept
+            </Button>
+          </Modal.Footer>
+        </Modal>
+
+        <Modal id="queryModal" show={this.state.showQueryModal} onHide={this.hideQueryModal} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              Please input your query
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="form-floating">
+              <textarea
+                className="form-control"
+                placeholder="Enter your query"
+                id="queryInputTxtArea"
+                style={{ height: "150px" }}
+                value={this.state.query}
+                onChange={this.updateQuery}
+                autoComplete="off"
+              ></textarea>
+              <label htmlFor="newLanguageAbSy">
+                Enter your query
+              </label>
+            </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={this.hideQueryModal} >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={this.runQuery} >
+              Accept
+            </Button>
+          </Modal.Footer>
+        </Modal>
+
+        <Modal show={this.state.showPropertiesModal} onHide={this.hidePropertiesModal} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              Properties
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <div>
+              <div className="row">
+                <div className="col-md-3">
+                  <label >Name</label>
+                </div>
+                <div className="col-md-9">
                   <input
-                    type="text"
                     className="form-control"
-                    id="modalInputValue"
-                    placeholder="VariaMosTextEditor"
-                    value={this.state.modalInputValue}
-                    onChange={this.handleUpdateEditorText}
-                    onKeyDown={this.onEnterModal}
+                    id="newPropertyInputName"
+                    aria-label="Name"
+                    value={this.state.plName}
+                    onChange={this.selectProductLineNameChange}
                   />
-                  <label htmlFor="floatingInput">
-                    {this.state.modalInputText}
-                  </label>
                 </div>
               </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  data-bs-dismiss="modal"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-Variamos"
-                  onClick={this.addNewFolder}
-                >
-                  Save changes
-                </button>
-                <div
-                  hidden={true}
-                  id="closeModal"
-                  data-bs-dismiss="modal"
-                ></div>
+              <div className="row">
+                <div className="col-md-3">
+                  <label >Type</label>
+                </div>
+                <div className="col-md-9">
+                  <select
+                    className="form-select"
+                    id="newPropertySelectDomain"
+                    aria-label="Select type"
+                    value={this.state.plType}
+                    onChange={this.selectProductLineTypeChange}
+                  >
+                    {this.state.plTypes.map((option, index) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="row">
+                <div className="col-md-3">
+                  <label >Domain</label>
+                </div>
+                <div className="col-md-9">
+                  <select
+                    className="form-select"
+                    id="newPropertySelectDomain"
+                    aria-label="Select domain"
+                    value={this.state.plDomain}
+                    onChange={this.selectProductLineDomainChange}
+                  >
+                    {this.state.plDomains.map((option, index) => (
+                      <option key={option} value={option}>
+                        {option}
+                      </option>
+                    ))}
+                  </select>
+                </div>
               </div>
             </div>
-          </div>
-        </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button
+              variant="secondary"
+              onClick={this.hidePropertiesModal}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="primary"
+              onClick={this.saveProperties}
+            >
+              Accept
+            </Button>
+          </Modal.Footer>
+        </Modal>
 
-        <div
-          className="modal fade"
-          id="deleteModal"
-          tabIndex={-1}
-          aria-labelledby="deleteModalLabel"
-          aria-hidden="true"
-        >
-          <div className="modal-dialog modalTreeMenu-left-variamos">
-            <div className="modal-content">
-              <div className="modal-header">
-                <h5 className="modal-title" id="deleteModalLabel">
-                  Delete
-                </h5>
-                <button
-                  type="button"
-                  className="btn-close"
-                  data-bs-dismiss="modal"
-                  aria-label="Close"
-                ></button>
-              </div>
-              <div className="modal-body">
-                <p>Are you sure you wish to delete this item?</p>
-              </div>
-              <div className="modal-footer">
-                <button
-                  type="button"
-                  className="btn btn-secondary"
-                  data-bs-dismiss="modal"
-                >
-                  No
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-Variamos"
-                  onClick={this.deleteItemProject}
-                  data-bs-dismiss="modal"
-                >
-                  Yes
-                </button>
-              </div>
+        <Modal show={this.state.showDeleteModal} onHide={this.hideDeleteModal} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              Delete
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <p>Are you sure you wish to delete this item?</p>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={this.hideDeleteModal} >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={this.deleteItemProject} >
+              Accept
+            </Button>
+          </Modal.Footer>
+        </Modal>
+
+        <Modal id="saveConfigurationModal" show={this.state.showSaveConfigurationModal} onHide={this.hideSaveConfigurationModal.bind(this)} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              Configuration name
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <div className="form-floating">
+              <input
+                type="text"
+                className="form-control"
+                id="modalInputValue"
+                placeholder="Configuration name"
+                value={this.state.configurationName}
+                onChange={this.inputConfigurationName_onChange.bind(this)}
+              // onKeyDown={this.onEnterModal}
+              />
+              <label htmlFor="floatingInput">
+                {this.state.modalInputText}
+              </label>
             </div>
-          </div>
-        </div>
+          </Modal.Body>
+          <Modal.Footer>
+            <Button variant="secondary" onClick={this.hideSaveConfigurationModal.bind(this)} >
+              Cancel
+            </Button>
+            <Button variant="primary" onClick={this.saveConfiguration.bind(this)} >
+              Accept
+            </Button>
+          </Modal.Footer>
+        </Modal>
+
+        <Modal id="saveConfigurationModal" show={this.state.showConfigurationManagementModal} onHide={this.hideConfigurationManagementModal.bind(this)} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              Configuration management
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <ConfigurationManagement reload={this.state.showConfigurationManagementModal} projectService={this.props.projectService} className="ConfigurationManagement" onConfigurationSelected={this.configurationManagement_onConfigurationSelected.bind(this)} />
+          </Modal.Body>
+        </Modal>
+
+        <Modal id="saveScopeModal" show={this.state.showScopeManagementModal} onHide={this.hideScopeManagementModal.bind(this)} size="lg" centered>
+          <Modal.Header closeButton>
+            <Modal.Title>
+              Scope management
+            </Modal.Title>
+          </Modal.Header>
+          <Modal.Body>
+            <ConfigurationManagement reload={this.state.showScopeManagementModal} projectService={this.props.projectService} className="ConfigurationManagement" onConfigurationSelected={this.scopeManagement_onScopeSelected.bind(this)} />
+          </Modal.Body>
+        </Modal>
 
         <ul className="dropdown-menu" id="context-menu">
           <li>
@@ -477,17 +1857,14 @@ class TreeMenu extends Component<Props, State> {
               {this.props.projectService.languages.map(
                 (language: Language, i: number) => (
                   <div key={i}>
-                    {language.type === this.state.newSelected &&
-                    (language.stateAccept === "ACTIVE" ||
-                      this.props.projectService.environment ===
-                        "development") ? (
+                    {language.type === this.state.newSelected ? (
                       <li>
                         <span
                           className={"dropdown-item type_" + language}
                           key={i}
                           onClick={() => this.addNewEModel(language)}
                         >
-                          {language.name + " Model"}
+                          {language.name}
                         </span>
                       </li>
                     ) : (
@@ -519,7 +1896,10 @@ class TreeMenu extends Component<Props, State> {
                         <li>
                           <span
                             className={"dropdown-item"}
-                            onClick={() => this.callExternalFuntion(efunction)}
+                            //Check if the external function needs extra data
+                            // TODO: (HACK) for now we trigger this if the header is non-empty.
+                            {...(Object.getOwnPropertyNames(efunction.header).length > 0 ? { "data-bs-toggle": "modal", "data-bs-target": "#queryModal", onClick: () => this.setSelectedFunction(i) } : { onClick: () => this.callExternalFuntion(efunction) })}
+                          // onClick={() => this.callExternalFuntion(efunction)}
                           >
                             {efunction.label}
                           </span>
@@ -553,6 +1933,18 @@ class TreeMenu extends Component<Props, State> {
           <li>
             <span
               className={
+                this.state.optionAllowProductLine
+                  ? "dropdown-item"
+                  : "hidden dropdown-item"
+              }
+              onClick={this.showPropertiesModal}
+            >
+              Properties
+            </span>
+          </li>
+          <li>
+            <span
+              className={
                 this.state.optionAllowApplication
                   ? "dropdown-item"
                   : "hidden dropdown-item"
@@ -581,6 +1973,13 @@ class TreeMenu extends Component<Props, State> {
             </span>
           </li>
           <li>
+            {this.state.optionAllowProperties ? (
+              <hr className="dropdown-divider" />
+            ) : (
+              ""
+            )}
+          </li>
+          <li>
             {this.state.optionAllowRename ? (
               <hr className="dropdown-divider" />
             ) : (
@@ -604,6 +2003,21 @@ class TreeMenu extends Component<Props, State> {
           <li>
             <span
               className={
+                this.state.optionAllowProperties
+                  ? "dropdown-item"
+                  : "hidden dropdown-item"
+              }
+              id="propertiesItem"
+              onClick={this.handleUpdateNewSelected}
+              data-bs-toggle="modal"
+              data-bs-target="#editorTextModal"
+            >
+              Properties
+            </span>
+          </li>
+          <li>
+            <span
+              className={
                 this.state.optionAllowRename
                   ? "dropdown-item"
                   : "hidden dropdown-item"
@@ -617,9 +2031,60 @@ class TreeMenu extends Component<Props, State> {
             </span>
           </li>
         </ul>
-        <script></script>
+        {this.state.showScopeModal &&
+          this.props.projectService.project.productLines.length > 0 &&
+          this.props.projectService.getScope() != null && (
+            <ScopeModal
+              show={this.state.showScopeModal}
+              initialScope={
+                this.props.projectService.getScope()
+              }
+              domain={
+                this.props.projectService.project.productLines[this.props.projectService.getIdCurrentProductLine()].domain
+              }
+              onHide={() => this.setState({ showScopeModal: false })}
+              onSave={(updatedScope: ScopeSPL) => {
+                const currentProductLineIndex = this.props.projectService.getIdCurrentProductLine();
+                const currentProductLine = this.props.projectService.project.productLines[currentProductLineIndex];
+
+                // Capturar valores anteriores para sincronización colaborativa
+                const oldValues = { ...currentProductLine.scope };
+                const newValues = { ...updatedScope };
+
+                // Aplicar cambios localmente
+                this.props.projectService.project.productLines[currentProductLineIndex].scope = updatedScope;
+
+                // Sincronizar la operación de actualización de scope si es colaborativo
+                if (treeCollaborationService.isCollaborationActive()) {
+                  const scopeData = {
+                    productLineId: currentProductLine.id,
+                    productLineName: currentProductLine.name,
+                    oldValues: oldValues,
+                    newValues: newValues,
+                    timestamp: Date.now()
+                  };
+                  treeCollaborationService.syncUpdateScopeOperation(scopeData, this.props.projectService);
+                }
+
+                // Guardar proyecto
+                const projectInfo = this.props.projectService.getProjectInformation();
+                this.props.projectService.saveProjectInServer(
+                  projectInfo,
+                  (response) => {
+                    console.log("Proyecto guardado exitosamente:", response);
+                  },
+                  (error) => {
+                    console.error("Error guardando el proyecto:", error);
+                  }
+                );
+              }}
+
+            />
+          )}
+
       </div>
     );
+
   }
 }
 

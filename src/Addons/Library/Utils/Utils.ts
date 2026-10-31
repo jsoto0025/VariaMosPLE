@@ -10,6 +10,16 @@ export class Utils {
     downloadAnchorNode.click();
     downloadAnchorNode.remove();
   }
+  
+  downloadBinaryFile(filename: any, bytes: any) {
+    var blob = new Blob([bytes]);
+    var downloadAnchorNode = document.createElement("a");
+    downloadAnchorNode.setAttribute("href", window.URL.createObjectURL(blob));
+    downloadAnchorNode.setAttribute("download", filename);
+    document.body.appendChild(downloadAnchorNode);
+    downloadAnchorNode.click();
+    downloadAnchorNode.remove(); 
+  }
 
   generateId(): string {
     var dt = new Date().getTime();
@@ -23,4 +33,17 @@ export class Utils {
     );
     return uuid;
   }
+}
+
+//src: https://gist.github.com/codeguy/6684588
+export const slugify = (...args: (string | number)[]): string => {
+  const value = args.join(' ')
+
+  return value
+      .normalize('NFD') // split an accented letter in the base letter and the acent
+      .replace(/[\u0300-\u036f]/g, '') // remove all previously split accents
+      .toUpperCase() // make it all upper case
+      .trim()
+      .replace(/[^A-Z0-9 ]/g, '') // remove all chars not letters, numbers and spaces (to be replaced)
+      .replace(/\s+/g, '_') // separator
 }

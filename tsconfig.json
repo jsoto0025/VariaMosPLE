@@ -1,6 +1,6 @@
 {
   "compilerOptions": {
-    "target": "es5",
+    "target": "es6",
     "lib": [
       "dom",
       "dom.iterable",
@@ -24,10 +24,13 @@
       "node_modules/@typed-mxgraph"
     ],
     "noImplicitAny": false,
-    "suppressImplicitAnyIndexErrors": true,
-    "strictNullChecks": false
+    "strictNullChecks": false,
+    "sourceMap": true,
+    "paths": {
+      "react": [ "./node_modules/@types/react" ]
+    }
   },
   "include": [
     "src"
-  ]
+  ] 
 }
